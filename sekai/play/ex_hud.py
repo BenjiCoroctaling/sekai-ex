@@ -127,6 +127,7 @@ def draw_rank():
     draw_aura()
     draw_details(x, y)
     draw_extra(-x, y)
+    draw_finish()
 
 
 def glyph(index: int, x: float, y: float, w: float, h: float):
@@ -201,7 +202,7 @@ def draw_details(x: float, y: float):
 def draw_extra(x: float, y: float):
     h = Layout.field_h * Options.ex_hud_scale
     z = get_z_alt(layers.overlay, 8998).tuple
-    if Options.ex_metrics_enabled:
+    if Options.ex_metrics_enabled and Options.ex_life_enabled:
         fraction = max(0.0, min(1.0, M.ex_display_life / max(1, M.ex_max_life)))
         left = x-h*0.14
         right = x+h*0.14
@@ -217,10 +218,12 @@ def draw_extra(x: float, y: float):
                 BaseSkin.ex_aura[14].draw(q,z=z,a=1)
         glyph(12, x-h*0.075, yy-h*0.045, h*0.09, h*0.028)
         digits(M.ex_life, 5, x+h*0.045, yy-h*0.045, h*0.038)
+    if Options.ex_metrics_enabled and Options.ex_score_enabled:
+        yy = y-h*0.19
         score = int(1000000*(M.ex_perfect+0.7*M.ex_great+0.5*M.ex_good)/max(1,M.ex_note_total)+0.5)
         glyph(13, x, yy-h*0.087, h*0.10, h*0.027)
-        centered_score(score, x, yy-h*0.13, h*0.045)
-    if Options.ex_metrics_enabled and M.ex_life <= M.ex_max_life * 0.2:
+        centered_score(score, x, yy-h*0.13, h*0.052)
+    if Options.ex_metrics_enabled and Options.ex_life_enabled and Options.ex_warning_enabled and M.ex_life <= M.ex_max_life * 0.2:
         bounds = screen()
         depth = bounds.h * 0.035
         pulse = 0.16 + 0.22 * abs((time() % 0.9) / 0.45 - 1)
@@ -264,3 +267,24 @@ def draw_aura():
             BaseSkin.ex_aura[index+1].draw(Rect(l=bounds.l,r=bounds.r,b=bounds.b,t=bounds.b+depth).as_quad(),z=z,a=a)
             BaseSkin.ex_aura[index+2].draw(Rect(l=bounds.l,r=bounds.l+depth,b=bounds.b,t=bounds.t).as_quad(),z=z,a=a)
             BaseSkin.ex_aura[index+3].draw(Rect(l=bounds.r-depth,r=bounds.r,b=bounds.b,t=bounds.t).as_quad(),z=z,a=a)
+
+
+def draw_finish():
+    if not Options.ex_finish_enabled or M.ex_note_total <= 0:
+        return
+    total = M.ex_perfect + M.ex_great + M.ex_good + M.ex_miss
+    if total < M.ex_note_total or M.ex_good + M.ex_miss > 0:
+        return
+    age = time() - M.ex_end_time
+    if age < 0 or age > 2.8:
+        return
+    h = Layout.field_h * Options.ex_hud_scale
+    fade = min(1.0, age / 0.22, (2.8-age)/0.55)
+    scale = 1 + 0.12 * max(0.0, 1-age/0.55)
+    w = h * 0.46 * scale
+    height = h * 0.085 * scale
+    y = h * 0.32
+    index = 9
+    if M.ex_great == 0:
+        index = 8
+    BaseSkin.ex_labels[index].draw(Rect(l=-w/2,r=w/2,b=y-height/2,t=y+height/2).as_quad(),z=get_z_alt(layers.overlay,9003).tuple,a=fade)

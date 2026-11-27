@@ -118,7 +118,7 @@ def init_ui():
         anchor=Vec2(min(safe_area().r - Layout.field_h * 0.17, Layout.field_w * 0.455) - Layout.field_h * Options.ex_hud_inset, Layout.field_h * 0.0875),
         pivot=Vec2(0.5, 0.5),
         dimensions=Vec2(0, Layout.field_h * 0.14) * ui.combo_config.scale * Options.ex_hud_scale,
-        alpha=ui.combo_config.alpha * show_ui,
+        alpha=ui.combo_config.alpha * show_ui * Options.ex_combo_enabled,
         horizontal_align=HorizontalAlign.CENTER,
         background=False,
     )
@@ -126,7 +126,7 @@ def init_ui():
         anchor=Vec2(min(safe_area().r - Layout.field_h * 0.17, Layout.field_w * 0.455) - Layout.field_h * Options.ex_hud_inset, Layout.field_h * 0.0875),
         pivot=Vec2(0.5, -2.25),
         dimensions=Vec2(0, Layout.field_h * 0.14 * 0.25) * ui.combo_config.scale * Options.ex_hud_scale,
-        alpha=ui.combo_config.alpha * show_ui,
+        alpha=ui.combo_config.alpha * show_ui * Options.ex_combo_enabled,
         horizontal_align=HorizontalAlign.CENTER,
         background=False,
     )
