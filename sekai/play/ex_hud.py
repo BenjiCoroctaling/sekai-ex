@@ -1,6 +1,6 @@
 from sonolus.script.bucket import Judgment
 from sonolus.script.quad import Rect
-from sonolus.script.runtime import is_watch, is_replay, safe_area, time
+from sonolus.script.runtime import is_watch, is_replay, safe_area, screen, time
 from sekai.lib.layout import Layout
 from sekai.lib.note import NoteKind
 from sekai.lib.layer import get_z_alt, layers
@@ -94,6 +94,7 @@ def draw_rank():
             BaseSkin.ex_rank[index].draw(Rect(l=x-w*glow/2, r=x+w*glow/2, b=y-h*glow/2, t=y+h*glow/2).as_quad(), z=get_z_alt(layers.overlay, 8999).tuple, a=0.16+0.12*pulse)
         BaseSkin.ex_rank[index].draw(Rect(l=x-w/2, r=x+w/2, b=y-h/2, t=y+h/2).as_quad(), z=get_z_alt(layers.overlay, 9000).tuple, a=1)
 
+    draw_aura()
     draw_details(x, y)
     draw_extra(-x, y)
 
@@ -138,12 +139,6 @@ def draw_details(x: float, y: float):
             digits(value, 4, x+h*0.065, yy, h*0.040)
     if Options.ex_status_enabled and total > 0:
         status_scale = 1.0
-        if time()-M.ex_milestone_time < 0.6 and M.ex_milestone > 0:
-            status_scale = 1.12
-            if M.ex_milestone % 500 == 0:
-                status_scale = 1.20
-            if M.ex_milestone % 1000 == 0:
-                status_scale = 1.28
         if M.ex_perfect == total:
             glyph(8, -x, y-h*0.105, h*0.22*status_scale, h*0.04*status_scale)
         elif M.ex_miss == 0 and M.ex_good == 0:
@@ -171,14 +166,16 @@ def draw_extra(x: float, y: float):
         if fraction > 0:
             q = Rect(l=left,r=left+(right-left)*fraction,b=yy-h*0.012,t=yy+h*0.012).as_quad()
             if fraction > 0.5:
-                BaseSkin.lane_background_green.draw(q,z=z,a=1)
+                BaseSkin.ex_aura[12].draw(q,z=z,a=1)
             elif fraction > 0.2:
-                BaseSkin.lane_background_yellow.draw(q,z=z,a=1)
+                BaseSkin.ex_aura[13].draw(q,z=z,a=1)
             else:
-                BaseSkin.lane_background_red.draw(q,z=z,a=1)
-        digits(M.ex_life, 5, x, yy-h*0.045, h*0.038)
+                BaseSkin.ex_aura[14].draw(q,z=z,a=1)
+        glyph(12, x-h*0.075, yy-h*0.045, h*0.09, h*0.028)
+        digits(M.ex_life, 5, x+h*0.045, yy-h*0.045, h*0.038)
         score = int(1000000*(M.ex_perfect+0.7*M.ex_great+0.5*M.ex_good)/max(1,M.ex_note_total)+0.5)
-        digits(score, 7, x, yy-h*0.105, h*0.045)
+        glyph(13, x, yy-h*0.087, h*0.10, h*0.027)
+        digits(score, 7, x, yy-h*0.13, h*0.045)
     if Options.ex_progress_enabled and not is_watch() and M.ex_end_time > 0:
         fraction = max(0.0,min(1.0,time()/M.ex_end_time))
         yy = safe_area().t-h*0.04
@@ -186,15 +183,30 @@ def draw_extra(x: float, y: float):
         right = h*0.35
         BaseSkin.lane_background_black.draw(Rect(l=left,r=right,b=yy-h*0.006,t=yy+h*0.006).as_quad(),z=z,a=0.8)
         if fraction > 0:
-            BaseSkin.lane_background_cyan.draw(Rect(l=left,r=left+(right-left)*fraction,b=yy-h*0.006,t=yy+h*0.006).as_quad(),z=z,a=1)
-    elapsed = time()-M.ex_milestone_time
-    if Options.ex_status_enabled and M.ex_milestone > 0 and elapsed >= 0 and elapsed < 0.65:
-        strength = 1.0
+            BaseSkin.ex_aura[15].draw(Rect(l=left,r=left+(right-left)*fraction,b=yy-h*0.006,t=yy+h*0.006).as_quad(),z=z,a=1)
+
+
+def draw_aura():
+    if not Options.ex_aura_enabled or M.ex_combo <= 0:
+        return
+    bounds = screen()
+    total = M.ex_perfect + M.ex_great + M.ex_good + M.ex_miss
+    index = 8
+    if M.ex_perfect == total:
+        index = 0
+    elif M.ex_miss == 0 and M.ex_good == 0:
+        index = 4
+    growth = min(1.0, M.ex_combo / 1000.0)
+    elapsed = time() - M.ex_milestone_time
+    pulse = 0.0
+    if M.ex_milestone > 0 and elapsed >= 0 and elapsed < 0.8:
+        pulse = (1 - elapsed / 0.8) * 0.18
         if M.ex_milestone % 500 == 0:
-            strength = 1.4
-        if M.ex_milestone % 1000 == 0:
-            strength = 1.8
-        for i in range(3):
-            yy = y+h*(0.14+i*0.025+elapsed*0.08)
-            w = h*(0.10+elapsed*0.15)*strength
-            BaseSkin.lane_background_yellow.draw(Rect(l=x-w/2,r=x+w/2,b=yy-h*0.003,t=yy+h*0.003).as_quad(),z=z,a=(1-elapsed/0.65)*0.8)
+            pulse *= 1.5
+    alpha = min(1.0, (0.12 + 0.70 * growth + pulse) * Options.ex_aura_intensity)
+    depth = bounds.h * (0.012 + 0.065 * growth + pulse * 0.08)
+    z = get_z_alt(layers.overlay, 8997).tuple
+    BaseSkin.ex_aura[index].draw(Rect(l=bounds.l,r=bounds.r,b=bounds.t-depth,t=bounds.t).as_quad(),z=z,a=alpha)
+    BaseSkin.ex_aura[index+1].draw(Rect(l=bounds.l,r=bounds.r,b=bounds.b,t=bounds.b+depth).as_quad(),z=z,a=alpha)
+    BaseSkin.ex_aura[index+2].draw(Rect(l=bounds.l,r=bounds.l+depth,b=bounds.b,t=bounds.t).as_quad(),z=z,a=alpha)
+    BaseSkin.ex_aura[index+3].draw(Rect(l=bounds.r-depth,r=bounds.r,b=bounds.b,t=bounds.t).as_quad(),z=z,a=alpha)

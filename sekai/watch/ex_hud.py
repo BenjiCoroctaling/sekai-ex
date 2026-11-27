@@ -18,6 +18,7 @@ def update_watch_hud():
     M.ex_miss = 0
     M.ex_last_hit = -1e8
     M.ex_error_ms = 0
+    last_break = -1e8
     index = WatchHudData.head
     while index > 0:
         note = EntityRef[WatchBaseNote](index=index).get()
@@ -27,6 +28,8 @@ def update_watch_hud():
             if hit_time == 0 and note.accuracy == 0 and note.judgment == Judgment.MISS:
                 hit_time = 1e8
         if hit_time <= now:
+            if note.judgment == Judgment.GOOD or note.judgment == Judgment.MISS:
+                last_break = max(last_break, hit_time)
             if note.judgment == Judgment.PERFECT:
                 M.ex_perfect += 1
             elif note.judgment == Judgment.GREAT:
@@ -46,4 +49,14 @@ def update_watch_hud():
         M.ex_combo = M.ex_perfect + M.ex_great
     else:
         M.ex_combo = 0
+        index = WatchHudData.head
+        while index > 0:
+            note = EntityRef[WatchBaseNote](index=index).get()
+            hit_time = note.target_time
+            if is_replay():
+                hit_time = note.end_time
+            if hit_time > last_break and hit_time <= now:
+                if note.judgment == Judgment.PERFECT or note.judgment == Judgment.GREAT:
+                    M.ex_combo += 1
+            index = note.ex_hud_next
     update_rank()

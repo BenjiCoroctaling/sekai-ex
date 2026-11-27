@@ -47,6 +47,9 @@ class Options:
     ex_progress_enabled: bool = toggle_option(name="SEKAI EX Progress", category=graphics, default=True)
     ex_metrics_enabled: bool = toggle_option(name="SEKAI EX Life and Score", category=graphics, default=True)
 
+    ex_aura_enabled: bool = toggle_option(name="SEKAI EX Combo Aura", category=graphics, default=True)
+    ex_aura_intensity: float = slider_option(name="SEKAI EX Aura Intensity", category=graphics, default=1, min=0, max=1, step=0.05, unit=StandardText.PERCENTAGE_UNIT)
+
     speed: float = slider_option(
         name=StandardText.SPEED,
         category=gameplay,
