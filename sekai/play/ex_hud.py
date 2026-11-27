@@ -273,18 +273,58 @@ def draw_finish():
     if not Options.ex_finish_enabled or M.ex_note_total <= 0:
         return
     total = M.ex_perfect + M.ex_great + M.ex_good + M.ex_miss
-    if total < M.ex_note_total or M.ex_good + M.ex_miss > 0:
+    if total < M.ex_note_total:
         return
     age = time() - M.ex_end_time
     if age < 0 or age > 2.8:
         return
-    h = Layout.field_h * Options.ex_hud_scale
-    fade = min(1.0, age / 0.22, (2.8-age)/0.55)
-    scale = 1 + 0.12 * max(0.0, 1-age/0.55)
-    w = h * 0.46 * scale
-    height = h * 0.085 * scale
-    y = h * 0.32
-    index = 9
-    if M.ex_great == 0:
-        index = 8
-    BaseSkin.ex_labels[index].draw(Rect(l=-w/2,r=w/2,b=y-height/2,t=y+height/2).as_quad(),z=get_z_alt(layers.overlay,9003).tuple,a=fade)
+    h = Layout.field_h
+    bounds = screen()
+    fade = max(0.0, min(1.0, age / 0.12, (2.8-age)/0.55))
+    impact = max(0.0, 1-age/0.55)
+    group = 2
+    label = 9
+    celebration = M.ex_good + M.ex_miss == 0
+    if celebration:
+        group = 1
+        if M.ex_great == 0:
+            group = 0
+            label = 8
+    z = get_z_alt(layers.overlay, 9003).tuple
+    depth = bounds.h * (0.10 + 0.12*impact)
+    a = fade * (0.45 + 0.5*impact)
+    if not celebration:
+        a *= 0.4
+    BaseSkin.ex_aura[group*4].draw(Rect(l=bounds.l,r=bounds.r,b=bounds.t-depth,t=bounds.t).as_quad(),z=z,a=a)
+    BaseSkin.ex_aura[group*4+1].draw(Rect(l=bounds.l,r=bounds.r,b=bounds.b,t=bounds.b+depth).as_quad(),z=z,a=a)
+    BaseSkin.ex_aura[group*4+2].draw(Rect(l=bounds.l,r=bounds.l+depth,b=bounds.b,t=bounds.t).as_quad(),z=z,a=a)
+    BaseSkin.ex_aura[group*4+3].draw(Rect(l=bounds.r-depth,r=bounds.r,b=bounds.b,t=bounds.t).as_quad(),z=z,a=a)
+    y = h*0.25
+    if celebration:
+        # Two expanding waves and symmetric sparks, using existing gradient sprites.
+        for i in range(2):
+            wave = age-i*0.22
+            if wave >= 0 and wave < 0.85:
+                spread = h*(0.12+wave*0.85)
+                opacity = (1-wave/0.85)*0.75
+                BaseSkin.ex_aura[group*4].draw(Rect(l=-spread,r=spread,b=y+h*0.10,t=y+h*0.13).as_quad(),z=z,a=opacity)
+                BaseSkin.ex_aura[group*4+1].draw(Rect(l=-spread,r=spread,b=y-h*0.13,t=y-h*0.10).as_quad(),z=z,a=opacity)
+        for i in range(24):
+            side = 1 if i%2 == 0 else -1
+            progress = min(1.0, age/(0.7+(i%5)*0.22))
+            px = side*h*(0.06+(0.20+(i%6)*0.085)*progress)
+            py = y+h*((i%7)-3)*0.045*progress
+            size = h*(0.009+(i%3)*0.004)*(1-progress*0.65)
+            BaseSkin.ex_aura[group*4].draw(Rect(l=px-size,r=px+size,b=py-size,t=py+size).as_quad(),z=z,a=fade*(1-progress)*0.9)
+        scale = 1+0.65*impact*impact
+        w = min(bounds.w*0.76,h*0.82*scale)
+        height = h*0.15*scale
+        BaseSkin.ex_labels[label].draw(Rect(l=-w/2,r=w/2,b=y-height/2,t=y+height/2).as_quad(),z=get_z_alt(layers.overlay,9004).tuple,a=fade)
+    else:
+        # Reuse the final rank sprite for ordinary clears and failed runs.
+        index = M.ex_rank
+        w = h*0.42
+        BaseSkin.ex_rank[index].draw(Rect(l=-w/2,r=w/2,b=y-w/4,t=y+w/4).as_quad(),z=z,a=fade)
+    if age > 0.28:
+        score = int(1000000*(M.ex_perfect+0.7*M.ex_great+0.5*M.ex_good)/max(1,M.ex_note_total)+0.5)
+        centered_score(score, 0, y-h*0.19, h*0.065)
