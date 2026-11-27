@@ -138,9 +138,9 @@ def init_ui():
         background=False,
     )
     ui.progress.update(
-        anchor=Vec2(0, box.t),
+        anchor=Vec2(0, box.t - 0.025),
         pivot=Vec2(0.5, 1),
-        dimensions=Vec2(box.w * 0.42, 0.035 * ui.progress_config.scale),
+        dimensions=Vec2(box.w * 0.56, 0.12 * ui.progress_config.scale),
         alpha=ui.progress_config.alpha * show_ui * Options.ex_progress_enabled,
         horizontal_align=HorizontalAlign.CENTER,
         background=True,

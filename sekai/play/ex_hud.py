@@ -67,6 +67,10 @@ def draw_rank():
     w = Layout.field_h * 0.30 * scale
     h = w * 0.5
     if Options.ex_rank_enabled:
+        if M.ex_rank == 6 or M.ex_rank == 7:
+            pulse = abs((time() % 1.6) / 0.8 - 1)
+            glow = 1.10 + 0.07 * pulse
+            BaseSkin.ex_rank[index].draw(Rect(l=x-w*glow/2, r=x+w*glow/2, b=y-h*glow/2, t=y+h*glow/2).as_quad(), z=get_z_alt(layers.overlay, 8999).tuple, a=0.16+0.12*pulse)
         BaseSkin.ex_rank[index].draw(Rect(l=x-w/2, r=x+w/2, b=y-h/2, t=y+h/2).as_quad(), z=get_z_alt(layers.overlay, 9000).tuple, a=1)
 
     draw_details(x, y)
@@ -111,10 +115,17 @@ def draw_details(x: float, y: float):
                 value = M.ex_miss
             digits(value, 4, x+h*0.065, yy, h*0.040)
     if Options.ex_status_enabled and total > 0:
+        status_scale = 1.0
+        if total % 100 == 0 and M.ex_miss == 0 and M.ex_good == 0:
+            status_scale = 1.12
+            if total % 500 == 0:
+                status_scale = 1.20
+            if total % 1000 == 0:
+                status_scale = 1.28
         if M.ex_perfect == total:
-            glyph(8, -x, y-h*0.105, h*0.22, h*0.04)
+            glyph(8, -x, y-h*0.105, h*0.22*status_scale, h*0.04*status_scale)
         elif M.ex_miss == 0 and M.ex_good == 0:
-            glyph(9, -x, y-h*0.105, h*0.22, h*0.04)
+            glyph(9, -x, y-h*0.105, h*0.22*status_scale, h*0.04*status_scale)
     if Options.ex_timing_enabled and (not is_watch() or is_replay()) and time()-M.ex_last_hit < 0.65:
         yy = -h*0.17
         if M.ex_error_ms < 0:
