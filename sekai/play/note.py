@@ -112,7 +112,7 @@ from sekai.lib.timescale_consumer import (
 )
 from sekai.play import input_manager
 from sekai.play.common import PlayLevelMemory
-from sekai.play.ex_hud import record_judgment
+from sekai.play.ex_hud import record_judgment, register_note
 from sekai.play.dynamic_stage import DynamicStage
 
 DEFAULT_BEST_TOUCH_TIME = -1e8
@@ -270,6 +270,7 @@ class BaseNote(PlayArchetype):
             start_time = min(start_time, hitbox_start + input_offset())
 
         if self.is_scored:
+            register_note(self.target_time)
             schedule_note_auto_sfx(self.effect_kind, self.target_time)
             hitbox_lane, hitbox_size = self.visual_extents_at(self.target_time)
             self.hitbox @= compute_hitbox_at_time(
@@ -326,12 +327,12 @@ class BaseNote(PlayArchetype):
             else:
                 self.judge_wrong_way(self.best_touch_time)
             if self.is_scored and self.despawn:
-                record_judgment(self.result.judgment, self.result.accuracy)
+                record_judgment(self.result.judgment, self.result.accuracy, self.kind)
             return
         if self.is_scored and time() > self.input_interval.end:
             self.handle_late_miss()
             if self.despawn:
-                record_judgment(self.result.judgment, self.result.accuracy)
+                record_judgment(self.result.judgment, self.result.accuracy, self.kind)
             return
         if self.is_scored and time() in self.input_interval and self.captured_touch_id == 0:
             if has_tap_input(self.kind):
@@ -405,7 +406,7 @@ class BaseNote(PlayArchetype):
                 assert_never(kind)
 
         if self.despawn:
-            record_judgment(self.result.judgment, self.result.accuracy)
+            record_judgment(self.result.judgment, self.result.accuracy, self.kind)
 
     def update_parallel(self):
         if self.despawn:

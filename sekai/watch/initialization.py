@@ -34,7 +34,7 @@ class WatchInitialization(WatchArchetype):
         init_level_config(self.revision)
         init_event_list(self.first_camera_ref)
         init_layout()
-        init_play_common()
+        init_play_common(self.initial_life)
         WatchHudData.head = 0
         init_ui()
         init_skin()

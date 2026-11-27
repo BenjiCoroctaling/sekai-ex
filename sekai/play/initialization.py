@@ -36,7 +36,7 @@ class Initialization(PlayArchetype):
         init_buckets()
         init_score(NOTE_ARCHETYPES)
         init_life(NOTE_ARCHETYPES, self.initial_life)
-        init_play_common()
+        init_play_common(self.initial_life)
 
     def initialize(self):
         StaticStage.spawn()
