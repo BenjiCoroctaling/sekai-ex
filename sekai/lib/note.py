@@ -1,0 +1,1480 @@
+from collections.abc import Iterable
+from enum import IntEnum, auto
+from math import ceil
+from typing import Literal, TypeIs, assert_never, cast
+
+from sonolus.script.archetype import EntityRef, HapticType, PlayArchetype, WatchArchetype, get_archetype_by_name
+from sonolus.script.array import Dim
+from sonolus.script.bucket import Bucket, Judgment
+from sonolus.script.containers import VarArray
+from sonolus.script.easing import ease_in_cubic
+from sonolus.script.effect import Effect
+from sonolus.script.interval import lerp, unlerp_clamped
+from sonolus.script.quad import Quad
+from sonolus.script.runtime import is_tutorial, is_watch, level_life, level_score, time
+from sonolus.script.sprite import Sprite
+from sonolus.script.vec import Vec2
+
+from sekai.lib import archetype_names
+from sekai.lib.buckets import (
+    EMPTY_JUDGMENT_WINDOW,
+    FLICK_CRITICAL_WINDOW,
+    FLICK_NORMAL_WINDOW,
+    SLIDE_END_CRITICAL_WINDOW,
+    SLIDE_END_FLICK_CRITICAL_WINDOW,
+    SLIDE_END_FLICK_NORMAL_WINDOW,
+    SLIDE_END_NORMAL_WINDOW,
+    SLIDE_END_TRACE_CRITICAL_WINDOW,
+    SLIDE_END_TRACE_NORMAL_WINDOW,
+    SLIDE_TICK_JUDGMENT_WINDOW,
+    TAP_CRITICAL_WINDOW,
+    TAP_NORMAL_WINDOW,
+    TRACE_CRITICAL_WINDOW,
+    TRACE_FLICK_CRITICAL_WINDOW,
+    TRACE_FLICK_NORMAL_WINDOW,
+    TRACE_NORMAL_WINDOW,
+    Buckets,
+    SekaiWindow,
+)
+from sekai.lib.connector import (
+    ActiveConnectorKind,
+    ConnectorKind,
+    DamageConnectorKind,
+    get_connector_base_kind,
+    get_connector_style,
+)
+from sekai.lib.ease import EaseType, ease, safe_unlerp_clamped
+from sekai.lib.effect import EMPTY_EFFECT, SFX_DISTANCE, Effects, first_available_effect
+from sekai.lib.layer import Layer, ZIndexes, get_z, get_z_alt, layers
+from sekai.lib.layout import (
+    IDENTITY_STAGE_SCREEN_TRANSFORM,
+    FlickDirection,
+    Hitbox,
+    NoteStageParams,
+    StageScreenTransform,
+    approach,
+    current_layout_transform,
+    get_alpha,
+    hidden_amount,
+    iter_slot_lanes,
+    layout_circular_effect,
+    layout_flick_arrow,
+    layout_flick_arrow_fallback,
+    layout_linear_effect,
+    layout_particle_lane,
+    layout_regular_note_body,
+    layout_regular_note_body_fallback,
+    layout_rotated_linear_effect,
+    layout_slim_note_body,
+    layout_slim_note_body_fallback,
+    layout_tick,
+    layout_tick_effect,
+    preempt_time,
+    transformed_vec_at,
+)
+from sekai.lib.level_config import LevelConfig
+from sekai.lib.note_style import NoteStyle, NoteVisualFamily
+from sekai.lib.options import Options, ScoreMode, VibrateMode
+from sekai.lib.particle import (
+    EMPTY_NOTE_PARTICLE_SET,
+    NoteParticleSet,
+    styled_note_particles,
+)
+from sekai.lib.skin import (
+    EMPTY_NOTE_SPRITE_SET,
+    ActiveSkin,
+    ArrowRenderType,
+    ArrowSpriteSet,
+    BodyRenderType,
+    BodySpriteSet,
+    NoteSpriteSet,
+    styled_note_sprites,
+)
+from sekai.lib.slot_effect import (
+    SLOT_EFFECT_DURATION,
+    SLOT_GLOW_EFFECT_DURATION,
+    draw_slot_effect,
+    draw_slot_glow_effect,
+)
+from sekai.lib.timescale import group_force_note_speed
+from sekai.lib.timescale_visibility import VisibilitySource, get_sources_visual_spawn_time, group_index
+
+
+class NoteKind(IntEnum):
+    NORM_TAP = auto()
+    CRIT_TAP = auto()
+
+    NORM_FLICK = auto()
+    CRIT_FLICK = auto()
+
+    NORM_TRACE = auto()
+    CRIT_TRACE = auto()
+
+    NORM_TRACE_FLICK = auto()
+    CRIT_TRACE_FLICK = auto()
+
+    NORM_RELEASE = auto()
+    CRIT_RELEASE = auto()
+
+    NORM_HEAD_TAP = auto()
+    CRIT_HEAD_TAP = auto()
+
+    NORM_HEAD_FLICK = auto()
+    CRIT_HEAD_FLICK = auto()
+
+    NORM_HEAD_TRACE = auto()
+    CRIT_HEAD_TRACE = auto()
+
+    NORM_HEAD_TRACE_FLICK = auto()
+    CRIT_HEAD_TRACE_FLICK = auto()
+
+    NORM_HEAD_RELEASE = auto()
+    CRIT_HEAD_RELEASE = auto()
+
+    NORM_TAIL_TAP = auto()
+    CRIT_TAIL_TAP = auto()
+
+    NORM_TAIL_FLICK = auto()
+    CRIT_TAIL_FLICK = auto()
+
+    NORM_TAIL_TRACE = auto()
+    CRIT_TAIL_TRACE = auto()
+
+    NORM_TAIL_TRACE_FLICK = auto()
+    CRIT_TAIL_TRACE_FLICK = auto()
+
+    NORM_TAIL_RELEASE = auto()
+    CRIT_TAIL_RELEASE = auto()
+
+    NORM_TICK = auto()
+    CRIT_TICK = auto()
+    HIDE_TICK = auto()
+
+    DAMAGE = auto()
+    HIDE_DAMAGE_TICK = auto()
+
+    ANCHOR = auto()
+
+
+VisibleNoteKind = Literal[
+    NoteKind.NORM_TAP,
+    NoteKind.CRIT_TAP,
+    NoteKind.NORM_FLICK,
+    NoteKind.CRIT_FLICK,
+    NoteKind.NORM_TRACE,
+    NoteKind.CRIT_TRACE,
+    NoteKind.NORM_TRACE_FLICK,
+    NoteKind.CRIT_TRACE_FLICK,
+    NoteKind.NORM_RELEASE,
+    NoteKind.CRIT_RELEASE,
+    NoteKind.NORM_HEAD_TAP,
+    NoteKind.CRIT_HEAD_TAP,
+    NoteKind.NORM_HEAD_FLICK,
+    NoteKind.CRIT_HEAD_FLICK,
+    NoteKind.NORM_HEAD_TRACE,
+    NoteKind.CRIT_HEAD_TRACE,
+    NoteKind.NORM_HEAD_TRACE_FLICK,
+    NoteKind.CRIT_HEAD_TRACE_FLICK,
+    NoteKind.NORM_HEAD_RELEASE,
+    NoteKind.CRIT_HEAD_RELEASE,
+    NoteKind.NORM_TAIL_TAP,
+    NoteKind.CRIT_TAIL_TAP,
+    NoteKind.NORM_TAIL_FLICK,
+    NoteKind.CRIT_TAIL_FLICK,
+    NoteKind.NORM_TAIL_TRACE,
+    NoteKind.CRIT_TAIL_TRACE,
+    NoteKind.NORM_TAIL_TRACE_FLICK,
+    NoteKind.CRIT_TAIL_TRACE_FLICK,
+    NoteKind.NORM_TAIL_RELEASE,
+    NoteKind.CRIT_TAIL_RELEASE,
+    NoteKind.NORM_TICK,
+    NoteKind.CRIT_TICK,
+    NoteKind.DAMAGE,
+]
+
+
+def init_score(note_archetypes: Iterable[type[PlayArchetype | WatchArchetype]]):
+    match LevelConfig.score_mode:
+        case ScoreMode.WEIGHTED_COMBO | ScoreMode.UNWEIGHTED_COMBO:
+            level_score().update(
+                perfect_multiplier=1.0,
+                great_multiplier=0.7,
+                good_multiplier=0.5,
+                consecutive_great_multiplier=0.1,  # Note that the base tap note multiplier is 10 not 1
+                consecutive_great_step=100,
+                consecutive_great_cap=1000,
+            )
+        case ScoreMode.WEIGHTED_FLAT | ScoreMode.UNWEIGHTED_FLAT:
+            level_score().update(
+                perfect_multiplier=3.0,
+                great_multiplier=2.0,
+                good_multiplier=1.0,
+            )
+        case _:
+            assert_never(LevelConfig.score_mode)
+
+    match LevelConfig.score_mode:
+        case ScoreMode.WEIGHTED_COMBO | ScoreMode.WEIGHTED_FLAT:
+            for note_archetype in note_archetypes:
+                kind = cast(NoteKind, note_archetype.key)
+                match kind:
+                    case NoteKind.NORM_TAP | NoteKind.NORM_HEAD_TAP | NoteKind.NORM_TAIL_TAP:
+                        weight = 10
+                    case NoteKind.CRIT_TAP | NoteKind.CRIT_HEAD_TAP | NoteKind.CRIT_TAIL_TAP:
+                        weight = 20
+                    case NoteKind.NORM_FLICK | NoteKind.NORM_HEAD_FLICK | NoteKind.NORM_TAIL_FLICK:
+                        weight = 10
+                    case NoteKind.CRIT_FLICK | NoteKind.CRIT_HEAD_FLICK | NoteKind.CRIT_TAIL_FLICK:
+                        weight = 30
+                    case NoteKind.NORM_TRACE | NoteKind.NORM_HEAD_TRACE | NoteKind.NORM_TAIL_TRACE:
+                        weight = 1
+                    case NoteKind.CRIT_TRACE | NoteKind.CRIT_HEAD_TRACE | NoteKind.CRIT_TAIL_TRACE:
+                        weight = 2
+                    case NoteKind.NORM_TRACE_FLICK | NoteKind.NORM_HEAD_TRACE_FLICK | NoteKind.NORM_TAIL_TRACE_FLICK:
+                        weight = 10
+                    case NoteKind.CRIT_TRACE_FLICK | NoteKind.CRIT_HEAD_TRACE_FLICK | NoteKind.CRIT_TAIL_TRACE_FLICK:
+                        weight = 30
+                    case NoteKind.NORM_RELEASE | NoteKind.NORM_HEAD_RELEASE | NoteKind.NORM_TAIL_RELEASE:
+                        weight = 10
+                    case NoteKind.CRIT_RELEASE | NoteKind.CRIT_HEAD_RELEASE | NoteKind.CRIT_TAIL_RELEASE:
+                        weight = 20
+                    case NoteKind.NORM_TICK | NoteKind.CRIT_TICK | NoteKind.HIDE_TICK:
+                        weight = 1
+                    case NoteKind.DAMAGE | NoteKind.HIDE_DAMAGE_TICK:
+                        weight = 1
+                    case NoteKind.ANCHOR:
+                        weight = 1  # Doesn't really matter since anchors are not scored
+                    case _:
+                        assert_never(kind)
+                note_archetype.archetype_score_multiplier = weight
+        case ScoreMode.UNWEIGHTED_COMBO | ScoreMode.UNWEIGHTED_FLAT:
+            for note_archetype in note_archetypes:
+                note_archetype.archetype_score_multiplier = 10
+        case _:
+            assert_never(LevelConfig.score_mode)
+
+
+def init_life(
+    note_archetypes: Iterable[type[PlayArchetype | WatchArchetype]],
+    initial_life: int,
+):
+    for note_archetype in note_archetypes:
+        init_note_life(note_archetype)
+    level_life().update(initial=initial_life, maximum=initial_life)
+
+
+def init_note_life(archetype: type[PlayArchetype | WatchArchetype]):
+    kind = cast(NoteKind, archetype.key)
+    match kind:
+        case (
+            NoteKind.NORM_TAP
+            | NoteKind.CRIT_TAP
+            | NoteKind.NORM_FLICK
+            | NoteKind.CRIT_FLICK
+            | NoteKind.NORM_TRACE
+            | NoteKind.CRIT_TRACE
+            | NoteKind.NORM_TRACE_FLICK
+            | NoteKind.CRIT_TRACE_FLICK
+            | NoteKind.NORM_RELEASE
+            | NoteKind.CRIT_RELEASE
+            | NoteKind.NORM_HEAD_TAP
+            | NoteKind.CRIT_HEAD_TAP
+            | NoteKind.NORM_HEAD_FLICK
+            | NoteKind.CRIT_HEAD_FLICK
+            | NoteKind.NORM_HEAD_TRACE
+            | NoteKind.CRIT_HEAD_TRACE
+            | NoteKind.NORM_HEAD_TRACE_FLICK
+            | NoteKind.CRIT_HEAD_TRACE_FLICK
+            | NoteKind.NORM_HEAD_RELEASE
+            | NoteKind.CRIT_HEAD_RELEASE
+            | NoteKind.NORM_TAIL_TAP
+            | NoteKind.CRIT_TAIL_TAP
+            | NoteKind.NORM_TAIL_FLICK
+            | NoteKind.CRIT_TAIL_FLICK
+            | NoteKind.NORM_TAIL_TRACE
+            | NoteKind.CRIT_TAIL_TRACE
+            | NoteKind.NORM_TAIL_TRACE_FLICK
+            | NoteKind.CRIT_TAIL_TRACE_FLICK
+            | NoteKind.NORM_TAIL_RELEASE
+            | NoteKind.CRIT_TAIL_RELEASE
+        ):
+            archetype.life.miss_increment = -80
+        case NoteKind.NORM_TICK | NoteKind.CRIT_TICK | NoteKind.HIDE_TICK | NoteKind.DAMAGE | NoteKind.HIDE_DAMAGE_TICK:
+            archetype.life.miss_increment = -40
+        case NoteKind.ANCHOR:
+            pass
+        case _:
+            assert_never(kind)
+
+
+def map_note_kind(kind: NoteKind) -> NoteKind:
+    return kind
+
+
+def mirror_flick_direction(direction: FlickDirection) -> FlickDirection:
+    match direction:
+        case FlickDirection.UP_OMNI:
+            return FlickDirection.UP_OMNI
+        case FlickDirection.DOWN_OMNI:
+            return FlickDirection.DOWN_OMNI
+        case FlickDirection.UP_LEFT:
+            return FlickDirection.UP_RIGHT
+        case FlickDirection.UP_RIGHT:
+            return FlickDirection.UP_LEFT
+        case FlickDirection.DOWN_LEFT:
+            return FlickDirection.DOWN_RIGHT
+        case FlickDirection.DOWN_RIGHT:
+            return FlickDirection.DOWN_LEFT
+        case _:
+            assert_never(direction)
+
+
+def get_visual_spawn_time(
+    timescale_group: int | EntityRef,
+    target_time: float,
+    offset_min: float = 0.0,
+    offset_max: float = 0.0,
+):
+    force_speed = group_force_note_speed(timescale_group)
+    sources = VarArray[VisibilitySource, Dim[4]].new()
+    sources.append(
+        VisibilitySource(
+            group_index(timescale_group), target_time, preempt_time(force_speed), offset_min, offset_max, False
+        )
+    )
+    return get_sources_visual_spawn_time(sources, target_time)
+
+
+def get_attach_frac(
+    head_target_time: float,
+    tail_target_time: float,
+    target_time: float,
+) -> float:
+    return safe_unlerp_clamped(head_target_time, tail_target_time, target_time)
+
+
+def get_attach_frac_for_note(
+    head_beat: float,
+    tail_beat: float,
+    head_target_time: float,
+    tail_target_time: float,
+    target_time: float,
+    head_elevation: float,
+    tail_elevation: float,
+    elevation: float,
+) -> float:
+    # Only exact authored beat equality switches to elevation.
+    if head_beat == tail_beat:
+        return safe_unlerp_clamped(head_elevation, tail_elevation, elevation)
+    return get_attach_frac(head_target_time, tail_target_time, target_time)
+
+
+def get_attach_eased_frac(
+    ease_type: EaseType,
+    head_target_time: float,
+    tail_target_time: float,
+    target_time: float,
+) -> float:
+    return ease(ease_type, get_attach_frac(head_target_time, tail_target_time, target_time))
+
+
+def get_attach_params(
+    ease_type: EaseType,
+    head_lane: float,
+    head_size: float,
+    head_target_time: float,
+    tail_lane: float,
+    tail_size: float,
+    tail_target_time: float,
+    target_time: float,
+    fraction: float | None = None,
+):
+    eased_frac = (
+        get_attach_eased_frac(ease_type, head_target_time, tail_target_time, target_time)
+        if fraction is None
+        else ease(ease_type, fraction)
+    )
+    lane = lerp(head_lane, tail_lane, eased_frac)
+    size = max(0.0, lerp(head_size, tail_size, eased_frac))
+    return lane, size
+
+
+def draw_note(
+    kind: NoteKind,
+    lane: float,
+    size: float,
+    visual_progress: float,
+    direction: FlickDirection,
+    target_time: float,
+    transform: StageScreenTransform,
+    note_alpha: float,
+    style: NoteStyle = NoteStyle.DEFAULT,
+    *,
+    sprite_set: NoteSpriteSet | None = None,
+):
+    travel = approach(visual_progress)
+    if sprite_set is None:
+        sprite_set = get_note_sprite_set(kind, direction, style)
+    draw_note_body(sprite_set.body, kind, lane, size, travel, target_time, transform, note_alpha)
+    draw_note_arrow(sprite_set.arrow, kind, lane, size, travel, target_time, direction, transform, note_alpha)
+    draw_note_tick(sprite_set.tick, lane, travel, target_time, transform, note_alpha)
+
+
+def draw_slide_note_head(
+    kind: NoteKind,
+    connector_kind: ActiveConnectorKind | DamageConnectorKind,
+    lane: float,
+    size: float,
+    target_time: float,
+    visual_progress: float = 1.0,
+    *,
+    transform: StageScreenTransform,
+    note_alpha: float,
+    style: NoteStyle = NoteStyle.DEFAULT,
+):
+    if hidden_amount() > 0:
+        return
+    if note_alpha <= 0:
+        return
+    connector_style = get_connector_style(connector_kind)
+    if connector_style != NoteStyle.DEFAULT:
+        style = connector_style
+    connector_kind = get_connector_base_kind(connector_kind)
+    match connector_kind:
+        case ConnectorKind.ACTIVE_NORMAL | ConnectorKind.FAKE_ACTIVE_NORMAL:
+            kind = note_kind_as_normal(kind)
+        case ConnectorKind.ACTIVE_CRITICAL | ConnectorKind.FAKE_ACTIVE_CRITICAL:
+            kind = note_kind_as_critical(kind)
+        case ConnectorKind.DAMAGE | ConnectorKind.FAKE_DAMAGE:
+            pass  # Keep kind as is
+        case _:
+            assert_never(connector_kind)
+    travel = approach(visual_progress)
+    sprite_set = get_note_sprite_set(kind, FlickDirection.UP_OMNI, style)
+    draw_note_body(sprite_set.body, kind, lane, size, travel, target_time, transform, note_alpha)
+    draw_note_tick(sprite_set.tick, lane, travel, target_time, transform, note_alpha)
+
+
+def note_kind_as_normal(kind: NoteKind) -> NoteKind:
+    match kind:
+        case NoteKind.CRIT_TAP:
+            return NoteKind.NORM_TAP
+        case NoteKind.CRIT_FLICK:
+            return NoteKind.NORM_FLICK
+        case NoteKind.CRIT_TRACE:
+            return NoteKind.NORM_TRACE
+        case NoteKind.CRIT_TRACE_FLICK:
+            return NoteKind.NORM_TRACE_FLICK
+        case NoteKind.CRIT_RELEASE:
+            return NoteKind.NORM_RELEASE
+        case NoteKind.CRIT_HEAD_TAP:
+            return NoteKind.NORM_HEAD_TAP
+        case NoteKind.CRIT_HEAD_FLICK:
+            return NoteKind.NORM_HEAD_FLICK
+        case NoteKind.CRIT_HEAD_TRACE:
+            return NoteKind.NORM_HEAD_TRACE
+        case NoteKind.CRIT_HEAD_TRACE_FLICK:
+            return NoteKind.NORM_HEAD_TRACE_FLICK
+        case NoteKind.CRIT_HEAD_RELEASE:
+            return NoteKind.NORM_HEAD_RELEASE
+        case NoteKind.CRIT_TAIL_TAP:
+            return NoteKind.NORM_TAIL_TAP
+        case NoteKind.CRIT_TAIL_FLICK:
+            return NoteKind.NORM_TAIL_FLICK
+        case NoteKind.CRIT_TAIL_TRACE:
+            return NoteKind.NORM_TAIL_TRACE
+        case NoteKind.CRIT_TAIL_TRACE_FLICK:
+            return NoteKind.NORM_TAIL_TRACE_FLICK
+        case NoteKind.CRIT_TAIL_RELEASE:
+            return NoteKind.NORM_TAIL_RELEASE
+        case NoteKind.CRIT_TICK:
+            return NoteKind.NORM_TICK
+        case _:
+            return kind
+
+
+def note_kind_as_critical(kind: NoteKind) -> NoteKind:
+    match kind:
+        case NoteKind.NORM_TAP:
+            return NoteKind.CRIT_TAP
+        case NoteKind.NORM_FLICK:
+            return NoteKind.CRIT_FLICK
+        case NoteKind.NORM_TRACE:
+            return NoteKind.CRIT_TRACE
+        case NoteKind.NORM_TRACE_FLICK:
+            return NoteKind.CRIT_TRACE_FLICK
+        case NoteKind.NORM_RELEASE:
+            return NoteKind.CRIT_RELEASE
+        case NoteKind.NORM_HEAD_TAP:
+            return NoteKind.CRIT_HEAD_TAP
+        case NoteKind.NORM_HEAD_FLICK:
+            return NoteKind.CRIT_HEAD_FLICK
+        case NoteKind.NORM_HEAD_TRACE:
+            return NoteKind.CRIT_HEAD_TRACE
+        case NoteKind.NORM_HEAD_TRACE_FLICK:
+            return NoteKind.CRIT_HEAD_TRACE_FLICK
+        case NoteKind.NORM_HEAD_RELEASE:
+            return NoteKind.CRIT_HEAD_RELEASE
+        case NoteKind.NORM_TAIL_TAP:
+            return NoteKind.CRIT_TAIL_TAP
+        case NoteKind.NORM_TAIL_FLICK:
+            return NoteKind.CRIT_TAIL_FLICK
+        case NoteKind.NORM_TAIL_TRACE:
+            return NoteKind.CRIT_TAIL_TRACE
+        case NoteKind.NORM_TAIL_TRACE_FLICK:
+            return NoteKind.CRIT_TAIL_TRACE_FLICK
+        case NoteKind.NORM_TAIL_RELEASE:
+            return NoteKind.CRIT_TAIL_RELEASE
+        case NoteKind.NORM_TICK:
+            return NoteKind.CRIT_TICK
+        case _:
+            return kind
+
+
+def get_note_visual_family(kind: VisibleNoteKind, direction: FlickDirection) -> NoteVisualFamily:
+    match kind:
+        case NoteKind.NORM_TAP:
+            return NoteVisualFamily.NORMAL_NOTE
+        case NoteKind.CRIT_TAP:
+            return NoteVisualFamily.CRITICAL_NOTE
+        case NoteKind.NORM_FLICK | NoteKind.NORM_HEAD_FLICK | NoteKind.NORM_TAIL_FLICK:
+            if direction in {FlickDirection.UP_OMNI, FlickDirection.UP_LEFT, FlickDirection.UP_RIGHT}:
+                return NoteVisualFamily.FLICK_NOTE
+            else:
+                return NoteVisualFamily.DOWN_FLICK_NOTE
+        case NoteKind.CRIT_FLICK | NoteKind.CRIT_HEAD_FLICK | NoteKind.CRIT_TAIL_FLICK:
+            if direction in {FlickDirection.UP_OMNI, FlickDirection.UP_LEFT, FlickDirection.UP_RIGHT}:
+                return NoteVisualFamily.CRITICAL_FLICK_NOTE
+            else:
+                return NoteVisualFamily.CRITICAL_DOWN_FLICK_NOTE
+        case NoteKind.NORM_TRACE | NoteKind.NORM_HEAD_TRACE | NoteKind.NORM_TAIL_TRACE:
+            return NoteVisualFamily.TRACE_NOTE
+        case NoteKind.CRIT_TRACE | NoteKind.CRIT_HEAD_TRACE | NoteKind.CRIT_TAIL_TRACE:
+            return NoteVisualFamily.CRITICAL_TRACE_NOTE
+        case NoteKind.NORM_TRACE_FLICK | NoteKind.NORM_HEAD_TRACE_FLICK | NoteKind.NORM_TAIL_TRACE_FLICK:
+            if direction in {FlickDirection.UP_OMNI, FlickDirection.UP_LEFT, FlickDirection.UP_RIGHT}:
+                return NoteVisualFamily.TRACE_FLICK_NOTE
+            else:
+                return NoteVisualFamily.TRACE_DOWN_FLICK_NOTE
+        case NoteKind.CRIT_TRACE_FLICK | NoteKind.CRIT_HEAD_TRACE_FLICK | NoteKind.CRIT_TAIL_TRACE_FLICK:
+            if direction in {FlickDirection.UP_OMNI, FlickDirection.UP_LEFT, FlickDirection.UP_RIGHT}:
+                return NoteVisualFamily.CRITICAL_TRACE_FLICK_NOTE
+            else:
+                return NoteVisualFamily.CRITICAL_TRACE_DOWN_FLICK_NOTE
+        case (
+            NoteKind.NORM_RELEASE
+            | NoteKind.NORM_HEAD_TAP
+            | NoteKind.NORM_HEAD_RELEASE
+            | NoteKind.NORM_TAIL_TAP
+            | NoteKind.NORM_TAIL_RELEASE
+        ):
+            return NoteVisualFamily.SLIDE_NOTE
+        case (
+            NoteKind.CRIT_RELEASE
+            | NoteKind.CRIT_HEAD_TAP
+            | NoteKind.CRIT_HEAD_RELEASE
+            | NoteKind.CRIT_TAIL_TAP
+            | NoteKind.CRIT_TAIL_RELEASE
+        ):
+            return NoteVisualFamily.CRITICAL_SLIDE_NOTE
+        case NoteKind.NORM_TICK:
+            return NoteVisualFamily.NORMAL_SLIDE_TICK_NOTE
+        case NoteKind.CRIT_TICK:
+            return NoteVisualFamily.CRITICAL_SLIDE_TICK_NOTE
+        case NoteKind.DAMAGE:
+            return NoteVisualFamily.DAMAGE_NOTE
+        case _:
+            assert_never(kind)
+
+
+def get_note_sprite_set(
+    kind: NoteKind, direction: FlickDirection, style: NoteStyle = NoteStyle.DEFAULT
+) -> NoteSpriteSet:
+    result = +NoteSpriteSet
+    if kind in {NoteKind.HIDE_TICK, NoteKind.HIDE_DAMAGE_TICK, NoteKind.ANCHOR}:
+        result @= EMPTY_NOTE_SPRITE_SET
+    else:
+        result @= styled_note_sprites(get_note_visual_family(cast(VisibleNoteKind, kind), direction), style)
+    return result
+
+
+def get_note_body_layer(kind: NoteKind) -> Layer:
+    result = +Layer
+    match kind:
+        case (
+            NoteKind.NORM_TRACE
+            | NoteKind.CRIT_TRACE
+            | NoteKind.NORM_TRACE_FLICK
+            | NoteKind.CRIT_TRACE_FLICK
+            | NoteKind.NORM_HEAD_TRACE
+            | NoteKind.CRIT_HEAD_TRACE
+            | NoteKind.NORM_HEAD_TRACE_FLICK
+            | NoteKind.CRIT_HEAD_TRACE_FLICK
+            | NoteKind.NORM_TAIL_TRACE
+            | NoteKind.CRIT_TAIL_TRACE
+            | NoteKind.NORM_TAIL_TRACE_FLICK
+            | NoteKind.CRIT_TAIL_TRACE_FLICK
+            | NoteKind.DAMAGE
+        ):
+            result @= layers.note_slim_body
+        case _:
+            result @= layers.note_body
+    return result
+
+
+def draw_note_body(
+    sprites: BodySpriteSet,
+    kind: NoteKind,
+    lane: float,
+    size: float,
+    travel: float,
+    target_time: float,
+    transform: StageScreenTransform,
+    note_alpha: float,
+):
+    a = min(get_alpha(target_time) * note_alpha, 1.0)
+    z = get_z(get_note_body_layer(kind), time=target_time, lane=lane, elevation=transform.elevation)
+
+    def place(q):
+        return transform.transform_quad(q)
+
+    match sprites.render_type:
+        case BodyRenderType.NORMAL:
+            left_layout, middle_layout, right_layout = layout_regular_note_body(lane, size, travel)
+            sprites.left.draw(place(left_layout), z=z.tuple, a=a)
+            sprites.middle.draw(place(middle_layout), z=z.tuple, a=a)
+            sprites.right.draw(place(right_layout), z=z.tuple, a=a)
+        case BodyRenderType.SLIM:
+            left_layout, middle_layout, right_layout = layout_slim_note_body(lane, size, travel)
+            sprites.left.draw(place(left_layout), z=z.tuple, a=a)
+            sprites.middle.draw(place(middle_layout), z=z.tuple, a=a)
+            sprites.right.draw(place(right_layout), z=z.tuple, a=a)
+        case BodyRenderType.NORMAL_FALLBACK:
+            layout = layout_regular_note_body_fallback(lane, size, travel)
+            sprites.middle.draw(place(layout), z=z.tuple, a=a)
+        case BodyRenderType.SLIM_FALLBACK:
+            layout = layout_slim_note_body_fallback(lane, size, travel)
+            sprites.middle.draw(place(layout), z=z.tuple, a=a)
+
+
+def draw_note_tick(
+    sprite: Sprite, lane: float, travel: float, target_time: float, transform: StageScreenTransform, note_alpha: float
+):
+    if sprite.id < 0:
+        return
+    a = min(get_alpha(target_time) * note_alpha, 1.0)
+    z = get_z(layers.note_tick, time=target_time, lane=lane, elevation=transform.elevation)
+    layout = transform.transform_billboard(layout_tick(lane, travel), transformed_vec_at(lane, travel))
+    sprite.draw(layout, z=z.tuple, a=a)
+
+
+def draw_note_arrow(
+    sprites: ArrowSpriteSet,
+    kind: NoteKind,
+    lane: float,
+    size: float,
+    travel: float,
+    target_time: float,
+    direction: FlickDirection,
+    transform: StageScreenTransform,
+    note_alpha: float,
+):
+    match direction:
+        case _ if Options.marker_animation:
+            period = 0.5
+            animation_progress = (time() / period) % 1
+        case FlickDirection.UP_LEFT | FlickDirection.UP_OMNI | FlickDirection.UP_RIGHT:
+            animation_progress = 0.2
+        case FlickDirection.DOWN_LEFT | FlickDirection.DOWN_OMNI | FlickDirection.DOWN_RIGHT:
+            animation_progress = 0.8
+        case _:
+            assert_never(direction)
+    animation_alpha = (1 - ease_in_cubic(animation_progress)) if Options.marker_animation else 1
+    a = min(get_alpha(target_time) * animation_alpha * note_alpha, 1.0)
+    z = get_z(
+        layers.note_arrow,
+        time=target_time,
+        lane=lane,
+        etc=direction + 6 * (not is_critical(kind)),
+        elevation=transform.elevation,
+    )
+    anchor = transformed_vec_at(lane, travel)
+    match sprites.render_type:
+        case ArrowRenderType.NORMAL:
+            layout = transform.transform_billboard(
+                layout_flick_arrow(lane, size, direction, travel, animation_progress), anchor
+            )
+            sprites.get_sprite(size, direction).draw(layout, z=z.tuple, a=a)
+        case ArrowRenderType.FALLBACK:
+            layout = transform.transform_billboard(
+                layout_flick_arrow_fallback(lane, size, direction, travel, animation_progress), anchor
+            )
+            sprites.get_sprite(size, direction).draw(layout, z=z.tuple, a=a)
+
+
+def has_note_particles(kind: NoteKind) -> TypeIs[VisibleNoteKind]:
+    return kind not in {NoteKind.HIDE_TICK, NoteKind.HIDE_DAMAGE_TICK, NoteKind.ANCHOR}
+
+
+def get_note_particles(
+    kind: NoteKind, direction: FlickDirection, style: NoteStyle = NoteStyle.DEFAULT
+) -> NoteParticleSet:
+    result = +NoteParticleSet
+    if not has_note_particles(kind):
+        result @= EMPTY_NOTE_PARTICLE_SET
+    else:
+        result @= styled_note_particles(get_note_visual_family(kind, direction), style)
+    return result
+
+
+class NoteEffectKind(IntEnum):
+    DEFAULT = 0
+    NONE = 1
+    NORM_BASIC = 2
+    NORM_FLICK = 3
+    NORM_TRACE = 4
+    NORM_TICK = 5
+    CRIT_BASIC = 6
+    CRIT_FLICK = 7
+    CRIT_TRACE = 8
+    CRIT_TICK = 9
+    DAMAGE = 10
+
+
+def get_note_effect_kind(kind: NoteKind, override: NoteEffectKind = NoteEffectKind.DEFAULT) -> NoteEffectKind:
+    match override:
+        case NoteEffectKind.DEFAULT:
+            match kind:
+                case (
+                    NoteKind.NORM_TAP
+                    | NoteKind.NORM_RELEASE
+                    | NoteKind.NORM_HEAD_TAP
+                    | NoteKind.NORM_HEAD_RELEASE
+                    | NoteKind.NORM_TAIL_TAP
+                    | NoteKind.NORM_TAIL_RELEASE
+                    | NoteKind.CRIT_RELEASE
+                    | NoteKind.CRIT_HEAD_TAP
+                    | NoteKind.CRIT_HEAD_RELEASE
+                    | NoteKind.CRIT_TAIL_TAP
+                    | NoteKind.CRIT_TAIL_RELEASE
+                ):
+                    return NoteEffectKind.NORM_BASIC
+                case (
+                    NoteKind.NORM_FLICK
+                    | NoteKind.NORM_TRACE_FLICK
+                    | NoteKind.NORM_HEAD_FLICK
+                    | NoteKind.NORM_HEAD_TRACE_FLICK
+                    | NoteKind.NORM_TAIL_FLICK
+                    | NoteKind.NORM_TAIL_TRACE_FLICK
+                ):
+                    return NoteEffectKind.NORM_FLICK
+                case NoteKind.NORM_TRACE | NoteKind.NORM_HEAD_TRACE | NoteKind.NORM_TAIL_TRACE:
+                    return NoteEffectKind.NORM_TRACE
+                case NoteKind.NORM_TICK:
+                    return NoteEffectKind.NORM_TICK
+                case NoteKind.CRIT_TAP:
+                    return NoteEffectKind.CRIT_BASIC
+                case (
+                    NoteKind.CRIT_FLICK
+                    | NoteKind.CRIT_TRACE_FLICK
+                    | NoteKind.CRIT_HEAD_FLICK
+                    | NoteKind.CRIT_HEAD_TRACE_FLICK
+                    | NoteKind.CRIT_TAIL_FLICK
+                    | NoteKind.CRIT_TAIL_TRACE_FLICK
+                ):
+                    return NoteEffectKind.CRIT_FLICK
+                case NoteKind.CRIT_TRACE | NoteKind.CRIT_HEAD_TRACE | NoteKind.CRIT_TAIL_TRACE:
+                    return NoteEffectKind.CRIT_TRACE
+                case NoteKind.CRIT_TICK:
+                    return NoteEffectKind.CRIT_TICK
+                case NoteKind.HIDE_TICK | NoteKind.HIDE_DAMAGE_TICK | NoteKind.ANCHOR:
+                    return NoteEffectKind.NONE
+                case NoteKind.DAMAGE:
+                    return NoteEffectKind.DAMAGE
+                case _:
+                    assert_never(kind)
+        case _:
+            return override
+
+
+def get_note_effect(kind: NoteEffectKind, judgment: Judgment):
+    result = Effect(-1)
+    assert kind != NoteEffectKind.DEFAULT, "Unexpected NoteEffectKind.DEFAULT argument to get_note_effect"
+    match kind:
+        case NoteEffectKind.NORM_BASIC:
+            match judgment:
+                case Judgment.PERFECT:
+                    result @= Effects.normal_perfect
+                case Judgment.GREAT:
+                    result @= Effects.normal_great
+                case Judgment.GOOD:
+                    result @= Effects.normal_good
+                case Judgment.MISS:
+                    result @= EMPTY_EFFECT
+                case _:
+                    assert_never(judgment)
+        case NoteEffectKind.NORM_FLICK:
+            match judgment:
+                case Judgment.PERFECT:
+                    result @= Effects.flick_perfect
+                case Judgment.GREAT:
+                    result @= Effects.flick_great
+                case Judgment.GOOD:
+                    result @= Effects.flick_good
+                case Judgment.MISS:
+                    result @= EMPTY_EFFECT
+                case _:
+                    assert_never(judgment)
+        case NoteEffectKind.NORM_TRACE:
+            if judgment != Judgment.MISS:
+                result @= first_available_effect(Effects.normal_trace, Effects.normal_perfect)
+            else:
+                result @= EMPTY_EFFECT
+        case NoteEffectKind.NORM_TICK:
+            if judgment != Judgment.MISS:
+                result @= first_available_effect(Effects.normal_tick, Effects.normal_perfect)
+            else:
+                result @= EMPTY_EFFECT
+        case NoteEffectKind.CRIT_BASIC:
+            if judgment != Judgment.MISS:
+                result @= first_available_effect(Effects.critical_tap, Effects.normal_perfect)
+            else:
+                result @= EMPTY_EFFECT
+        case NoteEffectKind.CRIT_FLICK:
+            if judgment != Judgment.MISS:
+                result @= first_available_effect(Effects.critical_flick, Effects.flick_perfect)
+            else:
+                result @= EMPTY_EFFECT
+        case NoteEffectKind.CRIT_TRACE:
+            if judgment != Judgment.MISS:
+                result @= first_available_effect(Effects.critical_trace, Effects.normal_perfect)
+            else:
+                result @= EMPTY_EFFECT
+        case NoteEffectKind.CRIT_TICK:
+            if judgment != Judgment.MISS:
+                result @= first_available_effect(Effects.critical_tick, Effects.normal_perfect)
+            else:
+                result @= EMPTY_EFFECT
+        case NoteEffectKind.NONE:
+            result @= EMPTY_EFFECT
+        case NoteEffectKind.DAMAGE:
+            if judgment == Judgment.MISS:
+                result @= Effects.normal_good
+            else:
+                result @= EMPTY_EFFECT
+        case _:
+            assert_never(kind)
+    return result
+
+
+def is_avoided_damage(kind: NoteKind, judgment: Judgment) -> bool:
+    return kind == NoteKind.DAMAGE and judgment == Judgment.PERFECT
+
+
+def play_note_hit_effects(
+    kind: NoteKind,
+    effect_kind: NoteEffectKind,
+    lane: float,
+    size: float,
+    direction: FlickDirection,
+    judgment: Judgment,
+    y_offset: float = 0.0,
+    pivot_lane: float = 0.0,
+    half_offset: bool = False,
+    single_line: bool = False,
+    lane_particles: bool = True,
+    *,
+    stage: NoteStageParams,
+    style: NoteStyle = NoteStyle.DEFAULT,
+):
+    # Damage with overridden sfx can play, so this goes before the damage check
+    sfx = get_note_effect(effect_kind, judgment)
+    if Options.sfx_enabled and not Options.auto_sfx and not is_watch() and sfx.is_available:
+        sfx.play(SFX_DISTANCE)
+    if is_avoided_damage(kind, judgment):
+        return
+    transform = stage.screen_transform(current_layout_transform())
+
+    def place(q):
+        return transform.transform_quad(q)
+
+    particles = get_note_particles(kind, direction, style)
+    if Options.note_effect_enabled:
+        anchor = transformed_vec_at(lane, approach(1 - y_offset))
+        if particles.linear.is_available:
+            layout = layout_linear_effect(lane, shear=0, y_offset=y_offset)
+            particles.linear.spawn(
+                transform.transform_billboard(layout, anchor), duration=0.5 / Options.effect_animation_speed
+            )
+        if particles.circular.is_available:
+            layout = layout_circular_effect(lane, w=1.75, h=1.05, y_offset=y_offset)
+            particles.circular.spawn(place(layout), duration=0.6 / Options.effect_animation_speed)
+        if particles.directional.is_available:
+            match direction:
+                case FlickDirection.UP_OMNI | FlickDirection.DOWN_OMNI:
+                    shear = 0
+                case FlickDirection.UP_LEFT | FlickDirection.DOWN_RIGHT:
+                    shear = -1
+                case FlickDirection.UP_RIGHT | FlickDirection.DOWN_LEFT:
+                    shear = 1
+                case _:
+                    assert_never(direction)
+            layout = layout_rotated_linear_effect(lane, shear=shear, y_offset=y_offset)
+            particles.directional.spawn(
+                transform.transform_billboard(layout, anchor), duration=0.32 / Options.effect_animation_speed
+            )
+        if particles.tick.is_available:
+            layout = layout_tick_effect(lane, y_offset=y_offset)
+            particles.tick.spawn(
+                transform.transform_billboard(layout, anchor), duration=0.6 / Options.effect_animation_speed
+            )
+        if particles.slot_linear.is_available:
+            for slot_lane in iter_slot_lanes(lane, size, pivot_lane=pivot_lane, half_offset=half_offset):
+                layout = layout_linear_effect(slot_lane, shear=0, y_offset=y_offset)
+                particles.slot_linear.spawn(
+                    transform.transform_billboard(layout, anchor), duration=0.5 / Options.effect_animation_speed
+                )
+    if Options.lane_effect_enabled and lane_particles:
+        lane_y_offset = (
+            y_offset if kind in {NoteKind.CRIT_FLICK, NoteKind.CRIT_HEAD_FLICK, NoteKind.CRIT_TAIL_FLICK} else 0.0
+        )
+        layout = layout_particle_lane(
+            lane,
+            size,
+            y_offset=lane_y_offset,
+            compensate_overshoot=particles.lane.is_available,
+            extend_down=kind
+            not in {
+                NoteKind.CRIT_FLICK,
+                NoteKind.CRIT_HEAD_FLICK,
+                NoteKind.CRIT_TAIL_FLICK,
+                NoteKind.CRIT_TRACE_FLICK,
+                NoteKind.CRIT_HEAD_TRACE_FLICK,
+                NoteKind.CRIT_TAIL_TRACE_FLICK,
+            },
+        )
+        if particles.lane.is_available:
+            particles.lane.spawn(place(layout), duration=1 / Options.effect_animation_speed)
+        elif particles.lane_basic.is_available:
+            particles.lane_basic.spawn(place(layout), duration=0.3 / Options.effect_animation_speed)
+    if Options.slot_effect_enabled and not is_watch():
+        schedule_note_slot_effects(
+            kind,
+            lane,
+            size,
+            time(),
+            direction,
+            y_offset=y_offset,
+            pivot_lane=pivot_lane,
+            half_offset=half_offset,
+            single_line=single_line,
+            stage=stage,
+            style=style,
+        )
+
+
+def get_note_haptic_feedback(kind: NoteKind, judgment: Judgment) -> HapticType:
+    if judgment == Judgment.MISS and Options.vibrate_mode in {VibrateMode.MISS, VibrateMode.MISS_AND_GOOD}:
+        return HapticType.LONG
+    if judgment == Judgment.GOOD and Options.vibrate_mode in {VibrateMode.MISS_AND_GOOD}:
+        return HapticType.LONG
+    if not Options.tap_haptics_enabled or judgment not in {Judgment.PERFECT, Judgment.GREAT}:
+        return HapticType.NONE
+    match kind:
+        case (
+            NoteKind.NORM_TAP
+            | NoteKind.NORM_HEAD_TAP
+            | NoteKind.NORM_TAIL_TAP
+            | NoteKind.CRIT_TAP
+            | NoteKind.CRIT_HEAD_TAP
+            | NoteKind.CRIT_TAIL_TAP
+        ):
+            return HapticType.HEAVY
+        case _:
+            return HapticType.NONE
+
+
+def schedule_note_auto_sfx(kind: NoteEffectKind, target_time: float):
+    if not Options.sfx_enabled:
+        return
+    if not Options.auto_sfx:
+        return
+    sfx = get_note_effect(kind, Judgment.PERFECT)
+    if sfx.is_available:
+        sfx.schedule(target_time, SFX_DISTANCE)
+
+
+def schedule_note_sfx(kind: NoteEffectKind, judgment: Judgment, target_time: float):
+    if not Options.sfx_enabled:
+        return
+    sfx = get_note_effect(kind, judgment)
+    if sfx.is_available:
+        sfx.schedule(target_time, SFX_DISTANCE)
+
+
+def schedule_note_slot_effects(
+    kind: NoteKind,
+    lane: float,
+    size: float,
+    target_time: float,
+    direction: FlickDirection,
+    y_offset: float = 0.0,
+    pivot_lane: float = 0.0,
+    half_offset: bool = False,
+    single_line: bool = False,
+    *,
+    stage: NoteStageParams,
+    style: NoteStyle = NoteStyle.DEFAULT,
+):
+    if is_tutorial():
+        return
+    if not Options.slot_effect_enabled:
+        return
+    sprite_set = get_note_sprite_set(kind, direction, style)
+    slot_sprite = sprite_set.slot
+    if slot_sprite.is_available and not single_line and size > 0:
+        for slot_lane in iter_slot_lanes(lane, size, pivot_lane=pivot_lane, half_offset=half_offset):
+            get_archetype_by_name(archetype_names.SLOT_EFFECT).spawn(
+                sprite=slot_sprite, start_time=target_time, lane=slot_lane, y_offset=y_offset, stage=stage
+            )
+    slot_glow_sprite = sprite_set.slot_glow
+    if slot_glow_sprite.is_available and size > 0:
+        get_archetype_by_name(archetype_names.SLOT_GLOW_EFFECT).spawn(
+            sprite=slot_glow_sprite,
+            start_time=target_time,
+            lane=lane,
+            size=size,
+            y_offset=y_offset,
+            stage=stage,
+        )
+
+
+def draw_tutorial_note_slot_effects(
+    kind: NoteKind,
+    lane: float,
+    size: float,
+    start_time: float,
+    direction: FlickDirection,
+    pivot_lane: float = 0.0,
+    half_offset: bool = False,
+    single_line: bool = False,
+    style: NoteStyle = NoteStyle.DEFAULT,
+):
+    sprite_set = get_note_sprite_set(kind, direction, style)
+    slot_sprite = sprite_set.slot
+    if (
+        slot_sprite.is_available
+        and not single_line
+        and time() < start_time + SLOT_EFFECT_DURATION / Options.effect_animation_speed
+    ):
+        for slot_lane in iter_slot_lanes(lane, size, pivot_lane=pivot_lane, half_offset=half_offset):
+            draw_slot_effect(
+                sprite=slot_sprite,
+                start_time=start_time,
+                end_time=start_time + SLOT_EFFECT_DURATION / Options.effect_animation_speed,
+                lane=slot_lane,
+                transform=IDENTITY_STAGE_SCREEN_TRANSFORM,
+            )
+    slot_glow_sprite = sprite_set.slot_glow
+    if (
+        slot_glow_sprite.is_available
+        and time() < start_time + SLOT_GLOW_EFFECT_DURATION / Options.effect_animation_speed
+    ):
+        draw_slot_glow_effect(
+            sprite=slot_glow_sprite,
+            start_time=start_time,
+            end_time=start_time + SLOT_GLOW_EFFECT_DURATION / Options.effect_animation_speed,
+            lane=lane,
+            size=size,
+            transform=IDENTITY_STAGE_SCREEN_TRANSFORM,
+        )
+
+
+def damage_tick_input_start_beat(beat: float) -> float:
+    """The last 0.5-beat grid point strictly before the given beat (e.g. 15 -> 14.5, 14.1 -> 14.0)."""
+    return (ceil(beat * 2 - 1e-6) - 1) / 2
+
+
+INSTANT_HITBOX_DRAW_WINDOW = 0.050
+DAMAGE_HITBOX_ACTIVE_WINDOW = 1 / 60
+
+
+def hitbox_draw_start(kind: NoteKind, input_start_time: float, target_time: float) -> float:
+    if kind == NoteKind.DAMAGE:
+        return target_time - INSTANT_HITBOX_DRAW_WINDOW
+    return input_start_time
+
+
+def hitbox_draw_alpha(kind: NoteKind, draw_start: float, target_time: float, current_time: float) -> float:
+    if kind == NoteKind.HIDE_DAMAGE_TICK:
+        return 1.0
+    return unlerp_clamped(draw_start, target_time, current_time)
+
+
+def get_note_window(kind: NoteKind) -> SekaiWindow:
+    result = +SekaiWindow
+    match kind:
+        case NoteKind.NORM_TAP | NoteKind.NORM_HEAD_TAP | NoteKind.NORM_TAIL_TAP:
+            result @= TAP_NORMAL_WINDOW
+        case NoteKind.CRIT_TAP | NoteKind.CRIT_HEAD_TAP | NoteKind.CRIT_TAIL_TAP:
+            result @= TAP_CRITICAL_WINDOW
+        case NoteKind.NORM_FLICK | NoteKind.NORM_HEAD_FLICK:
+            result @= FLICK_NORMAL_WINDOW
+        case NoteKind.CRIT_FLICK | NoteKind.CRIT_HEAD_FLICK:
+            result @= FLICK_CRITICAL_WINDOW
+        case NoteKind.NORM_TAIL_FLICK:
+            result @= SLIDE_END_FLICK_NORMAL_WINDOW
+        case NoteKind.CRIT_TAIL_FLICK:
+            result @= SLIDE_END_FLICK_CRITICAL_WINDOW
+        case NoteKind.NORM_TRACE | NoteKind.NORM_HEAD_TRACE:
+            result @= TRACE_NORMAL_WINDOW
+        case NoteKind.CRIT_TRACE | NoteKind.CRIT_HEAD_TRACE:
+            result @= TRACE_CRITICAL_WINDOW
+        case NoteKind.NORM_TRACE_FLICK | NoteKind.NORM_HEAD_TRACE_FLICK | NoteKind.NORM_TAIL_TRACE_FLICK:
+            result @= TRACE_FLICK_NORMAL_WINDOW
+        case NoteKind.CRIT_TRACE_FLICK | NoteKind.CRIT_HEAD_TRACE_FLICK | NoteKind.CRIT_TAIL_TRACE_FLICK:
+            result @= TRACE_FLICK_CRITICAL_WINDOW
+        case NoteKind.NORM_RELEASE | NoteKind.NORM_HEAD_RELEASE | NoteKind.NORM_TAIL_RELEASE:
+            result @= SLIDE_END_NORMAL_WINDOW
+        case NoteKind.CRIT_RELEASE | NoteKind.CRIT_HEAD_RELEASE | NoteKind.CRIT_TAIL_RELEASE:
+            result @= SLIDE_END_CRITICAL_WINDOW
+        case NoteKind.NORM_TAIL_TRACE:
+            result @= SLIDE_END_TRACE_NORMAL_WINDOW
+        case NoteKind.CRIT_TAIL_TRACE:
+            result @= SLIDE_END_TRACE_CRITICAL_WINDOW
+        case NoteKind.NORM_TAIL_TRACE_FLICK:
+            result @= TRACE_FLICK_NORMAL_WINDOW
+        case NoteKind.CRIT_TAIL_TRACE_FLICK:
+            result @= TRACE_FLICK_CRITICAL_WINDOW
+        case NoteKind.NORM_TICK | NoteKind.CRIT_TICK | NoteKind.HIDE_TICK:
+            result @= SLIDE_TICK_JUDGMENT_WINDOW
+        case NoteKind.ANCHOR | NoteKind.DAMAGE | NoteKind.HIDE_DAMAGE_TICK:
+            result @= EMPTY_JUDGMENT_WINDOW
+        case _:
+            assert_never(kind)
+    return result
+
+
+def get_note_bucket(kind: NoteKind) -> Bucket:
+    result = Bucket(-1)
+    match kind:
+        case NoteKind.NORM_TAP:
+            result @= Buckets.normal_tap
+        case NoteKind.CRIT_TAP:
+            result @= Buckets.critical_tap
+        case NoteKind.NORM_FLICK:
+            result @= Buckets.normal_flick
+        case NoteKind.CRIT_FLICK:
+            result @= Buckets.critical_flick
+        case NoteKind.NORM_TRACE:
+            result @= Buckets.normal_trace
+        case NoteKind.CRIT_TRACE:
+            result @= Buckets.critical_trace
+        case NoteKind.NORM_TRACE_FLICK:
+            result @= Buckets.normal_trace_flick
+        case NoteKind.CRIT_TRACE_FLICK:
+            result @= Buckets.critical_trace_flick
+        case NoteKind.NORM_HEAD_TAP:
+            result @= Buckets.normal_head_tap
+        case NoteKind.CRIT_HEAD_TAP:
+            result @= Buckets.critical_head_tap
+        case NoteKind.NORM_HEAD_FLICK:
+            result @= Buckets.normal_head_flick
+        case NoteKind.CRIT_HEAD_FLICK:
+            result @= Buckets.critical_head_flick
+        case NoteKind.NORM_HEAD_TRACE:
+            result @= Buckets.normal_head_trace
+        case NoteKind.CRIT_HEAD_TRACE:
+            result @= Buckets.critical_head_trace
+        case NoteKind.NORM_HEAD_TRACE_FLICK:
+            result @= Buckets.normal_head_trace_flick
+        case NoteKind.CRIT_HEAD_TRACE_FLICK:
+            result @= Buckets.critical_head_trace_flick
+        case NoteKind.NORM_TAIL_FLICK:
+            result @= Buckets.normal_tail_flick
+        case NoteKind.CRIT_TAIL_FLICK:
+            result @= Buckets.critical_tail_flick
+        case NoteKind.NORM_TAIL_TRACE:
+            result @= Buckets.normal_tail_trace
+        case NoteKind.CRIT_TAIL_TRACE:
+            result @= Buckets.critical_tail_trace
+        case NoteKind.NORM_TAIL_TRACE_FLICK:
+            result @= Buckets.normal_tail_trace_flick
+        case NoteKind.CRIT_TAIL_TRACE_FLICK:
+            result @= Buckets.critical_tail_trace_flick
+        case NoteKind.NORM_TAIL_RELEASE:
+            result @= Buckets.normal_tail_release
+        case NoteKind.CRIT_TAIL_RELEASE:
+            result @= Buckets.critical_tail_release
+        case (
+            NoteKind.NORM_RELEASE
+            | NoteKind.CRIT_RELEASE
+            | NoteKind.NORM_HEAD_RELEASE
+            | NoteKind.CRIT_HEAD_RELEASE
+            | NoteKind.NORM_TAIL_TAP
+            | NoteKind.CRIT_TAIL_TAP
+            | NoteKind.NORM_TICK
+            | NoteKind.CRIT_TICK
+            | NoteKind.HIDE_TICK
+            | NoteKind.ANCHOR
+            | NoteKind.DAMAGE
+            | NoteKind.HIDE_DAMAGE_TICK
+        ):
+            result @= Bucket(-1)
+        case _:
+            assert_never(kind)
+    return result
+
+
+def get_leniency(kind: NoteKind) -> float:
+    if kind in {NoteKind.DAMAGE, NoteKind.HIDE_DAMAGE_TICK}:
+        return 0.0
+    # For notes without input, this value doesn't matter
+    return 1.0
+
+
+def has_tap_input(kind: NoteKind) -> bool:
+    return kind in {
+        NoteKind.NORM_TAP,
+        NoteKind.CRIT_TAP,
+        NoteKind.NORM_FLICK,
+        NoteKind.CRIT_FLICK,
+        NoteKind.NORM_HEAD_TAP,
+        NoteKind.CRIT_HEAD_TAP,
+        NoteKind.NORM_HEAD_FLICK,
+        NoteKind.CRIT_HEAD_FLICK,
+        NoteKind.NORM_TAIL_TAP,
+        NoteKind.CRIT_TAIL_TAP,
+    }
+
+
+def has_release_input(kind: NoteKind) -> bool:
+    return kind in {
+        NoteKind.NORM_RELEASE,
+        NoteKind.CRIT_RELEASE,
+        NoteKind.NORM_HEAD_RELEASE,
+        NoteKind.CRIT_HEAD_RELEASE,
+        NoteKind.NORM_TAIL_RELEASE,
+        NoteKind.CRIT_TAIL_RELEASE,
+    }
+
+
+def is_head(kind: NoteKind) -> bool:
+    return kind in {
+        NoteKind.NORM_HEAD_TAP,
+        NoteKind.CRIT_HEAD_TAP,
+        NoteKind.NORM_HEAD_FLICK,
+        NoteKind.CRIT_HEAD_FLICK,
+        NoteKind.NORM_HEAD_TRACE,
+        NoteKind.CRIT_HEAD_TRACE,
+        NoteKind.NORM_HEAD_TRACE_FLICK,
+        NoteKind.CRIT_HEAD_TRACE_FLICK,
+        NoteKind.NORM_HEAD_RELEASE,
+        NoteKind.CRIT_HEAD_RELEASE,
+    }
+
+
+def is_critical(kind: NoteKind) -> bool:
+    return kind in {
+        NoteKind.CRIT_TAP,
+        NoteKind.CRIT_FLICK,
+        NoteKind.CRIT_TRACE,
+        NoteKind.CRIT_TRACE_FLICK,
+        NoteKind.CRIT_RELEASE,
+        NoteKind.CRIT_HEAD_TAP,
+        NoteKind.CRIT_HEAD_FLICK,
+        NoteKind.CRIT_HEAD_TRACE,
+        NoteKind.CRIT_HEAD_TRACE_FLICK,
+        NoteKind.CRIT_HEAD_RELEASE,
+        NoteKind.CRIT_TAIL_TAP,
+        NoteKind.CRIT_TAIL_FLICK,
+        NoteKind.CRIT_TAIL_TRACE,
+        NoteKind.CRIT_TAIL_TRACE_FLICK,
+        NoteKind.CRIT_TAIL_RELEASE,
+        NoteKind.CRIT_TICK,
+    }
+
+
+HITBOX_DEBUG_BORDER_THICKNESS = 0.01
+HITBOX_DEBUG_END_HALF_HEIGHT = 0.05
+HITBOX_DEBUG_END_WIDTH = 0.04
+HITBOX_DEBUG_DOT_HALF = 0.012
+HITBOX_DEBUG_TRIANGLE_HEIGHT = 0.2
+HITBOX_DEBUG_APEX_HALF = 0.012
+
+
+def draw_hitbox_line(sprite: Sprite, p1: Vec2, p2: Vec2, thickness: float, z: ZIndexes, a: float):
+    ortho = (p2 - p1).orthogonal().normalize_or_zero() * (thickness / 2)
+    sprite.draw(
+        Quad(
+            bl=p1 - ortho,
+            br=p2 - ortho,
+            tr=p2 + ortho,
+            tl=p1 + ortho,
+        ),
+        z=z.tuple,
+        a=a,
+    )
+
+
+def draw_hitbox_marker(
+    l: Vec2,
+    r: Vec2,
+    main_sprite: Sprite,
+    dot_sprite: Sprite,
+    z: ZIndexes,
+    z_dot: ZIndexes,
+    a: float,
+):
+    t = HITBOX_DEBUG_BORDER_THICKNESS
+    end_h = HITBOX_DEBUG_END_HALF_HEIGHT
+    end_w = HITBOX_DEBUG_END_WIDTH
+    dot = HITBOX_DEBUG_DOT_HALF
+    axis = (r - l).normalize_or_zero()
+    ortho = axis.orthogonal()
+    li = l + axis * end_w
+    ri = r - axis * end_w
+    main_sprite.draw(
+        Quad(
+            bl=li - ortho * t,
+            tl=li + ortho * t,
+            tr=ri + ortho * t,
+            br=ri - ortho * t,
+        ),
+        z=z.tuple,
+        a=a,
+    )
+    main_sprite.draw(
+        Quad(
+            bl=l - ortho * end_h,
+            tl=l + ortho * end_h,
+            tr=li + ortho * t,
+            br=li - ortho * t,
+        ),
+        z=z.tuple,
+        a=a,
+    )
+    main_sprite.draw(
+        Quad(
+            bl=ri - ortho * t,
+            tl=ri + ortho * t,
+            tr=r + ortho * end_h,
+            br=r - ortho * end_h,
+        ),
+        z=z.tuple,
+        a=a,
+    )
+    dot_sprite.draw(
+        Quad(
+            bl=l - ortho * dot,
+            tl=l + ortho * dot,
+            tr=l + axis * (2 * dot) + ortho * dot,
+            br=l + axis * (2 * dot) - ortho * dot,
+        ),
+        z=z_dot.tuple,
+        a=a,
+    )
+    dot_sprite.draw(
+        Quad(
+            bl=r - axis * (2 * dot) - ortho * dot,
+            tl=r - axis * (2 * dot) + ortho * dot,
+            tr=r + ortho * dot,
+            br=r - ortho * dot,
+        ),
+        z=z_dot.tuple,
+        a=a,
+    )
+
+
+def get_hitbox_bounds_sprite(kind: NoteKind, time_to_target: float) -> Sprite:
+    result = +Sprite
+    if kind == NoteKind.DAMAGE:
+        if time_to_target > DAMAGE_HITBOX_ACTIVE_WINDOW:
+            result @= ActiveSkin.guide_neutral
+        else:
+            result @= ActiveSkin.guide_green
+    elif kind == NoteKind.HIDE_DAMAGE_TICK:
+        result @= ActiveSkin.guide_green
+    else:
+        result @= ActiveSkin.guide_blue
+    return result
+
+
+def get_hitbox_target_sprite(kind: NoteKind) -> Sprite:
+    result = +Sprite
+    if kind in {NoteKind.DAMAGE, NoteKind.HIDE_DAMAGE_TICK}:
+        result @= ActiveSkin.guide_yellow
+    else:
+        result @= ActiveSkin.guide_red
+    return result
+
+
+def draw_hitbox_bounds_overlay(bounds: Quad, sprite: Sprite, alpha: float):
+    t = HITBOX_DEBUG_BORDER_THICKNESS
+    a = alpha
+    z_bounds = get_z_alt(layers.overlay, 0)
+    draw_hitbox_line(sprite, bounds.tl, bounds.tr, t, z_bounds, a)
+    draw_hitbox_line(sprite, bounds.bl, bounds.br, t, z_bounds, a)
+    draw_hitbox_line(sprite, bounds.tl, bounds.bl, t, z_bounds, a)
+    draw_hitbox_line(sprite, bounds.tr, bounds.br, t, z_bounds, a)
+    draw_hitbox_line(sprite, bounds.tl, bounds.br, t, z_bounds, a)
+    draw_hitbox_line(sprite, bounds.tr, bounds.bl, t, z_bounds, a)
+
+
+def draw_connector_hitbox_overlay(bounds: Quad, alpha: float):
+    draw_hitbox_bounds_overlay(bounds, ActiveSkin.guide_blue, alpha)
+
+
+def draw_hitbox_overlay(hitbox: Hitbox, kind: NoteKind, alpha: float, *, time_to_target: float):
+    t = HITBOX_DEBUG_BORDER_THICKNESS
+    a = alpha
+    z_triangle = get_z_alt(layers.overlay, 1)
+    z_apex = get_z_alt(layers.overlay, 2)
+    z_target = get_z_alt(layers.overlay, 3)
+    z_target_dot = get_z_alt(layers.overlay, 4)
+
+    draw_hitbox_bounds_overlay(hitbox.bounds, get_hitbox_bounds_sprite(kind, time_to_target), alpha)
+
+    if has_tap_input(kind) or has_release_input(kind):
+        target_sprite = get_hitbox_target_sprite(kind)
+        l = hitbox.target.l
+        r = hitbox.target.r
+        axis = (r - l).normalize_or_zero()
+        ortho = axis.orthogonal()
+        apex_half = HITBOX_DEBUG_APEX_HALF
+        target_apex = (l + r) / 2 + ortho * HITBOX_DEBUG_TRIANGLE_HEIGHT
+        draw_hitbox_line(
+            target_sprite,
+            l,
+            target_apex,
+            t,
+            z_triangle,
+            a,
+        )
+        draw_hitbox_line(
+            target_sprite,
+            r,
+            target_apex,
+            t,
+            z_triangle,
+            a,
+        )
+        target_sprite.draw(
+            Quad(
+                bl=target_apex - axis * apex_half - ortho * apex_half,
+                tl=target_apex - axis * apex_half + ortho * apex_half,
+                tr=target_apex + axis * apex_half + ortho * apex_half,
+                br=target_apex + axis * apex_half - ortho * apex_half,
+            ),
+            z=z_apex.tuple,
+            a=a,
+        )
+        draw_hitbox_marker(
+            l=l,
+            r=r,
+            main_sprite=target_sprite,
+            dot_sprite=ActiveSkin.guide_black,
+            z=z_target,
+            z_dot=z_target_dot,
+            a=a,
+        )

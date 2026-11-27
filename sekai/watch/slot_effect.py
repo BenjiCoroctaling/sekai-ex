@@ -1,0 +1,105 @@
+from sonolus.script.archetype import WatchArchetype, entity_memory
+from sonolus.script.sprite import Sprite
+
+from sekai.lib import archetype_names
+from sekai.lib.layout import IDENTITY_STAGE_SCREEN_TRANSFORM, NoteStageParams, NoteStageProjection
+from sekai.lib.options import Options
+from sekai.lib.slot_effect import (
+    SLOT_EFFECT_DURATION,
+    SLOT_GLOW_EFFECT_DURATION,
+    draw_slot_effect,
+    draw_slot_glow_effect,
+)
+
+
+class WatchSlotGlowEffect(WatchArchetype):
+    name = archetype_names.SLOT_GLOW_EFFECT
+
+    sprite: Sprite = entity_memory()
+    start_time: float = entity_memory()
+    lane: float = entity_memory()
+    size: float = entity_memory()
+    y_offset: float = entity_memory()
+    stage: NoteStageParams = entity_memory()
+    projection: NoteStageProjection = entity_memory()
+    end_time: float = entity_memory()
+
+    def initialize(self):
+        self.end_time = self.start_time + SLOT_GLOW_EFFECT_DURATION / Options.effect_animation_speed
+
+    def spawn_time(self) -> float:
+        return self.start_time
+
+    def despawn_time(self) -> float:
+        return self.start_time + SLOT_GLOW_EFFECT_DURATION / Options.effect_animation_speed
+
+    def update_parallel(self):
+        if self.stage.has_transform():
+            self.projection.update(self.stage)
+            draw_slot_glow_effect(
+                self.sprite,
+                self.start_time,
+                self.end_time,
+                self.lane,
+                self.size,
+                y_offset=self.y_offset,
+                transform=self.projection.transform,
+            )
+        else:
+            draw_slot_glow_effect(
+                self.sprite,
+                self.start_time,
+                self.end_time,
+                self.lane,
+                self.size,
+                y_offset=self.y_offset,
+                transform=IDENTITY_STAGE_SCREEN_TRANSFORM,
+            )
+
+
+class WatchSlotEffect(WatchArchetype):
+    name = archetype_names.SLOT_EFFECT
+
+    sprite: Sprite = entity_memory()
+    start_time: float = entity_memory()
+    lane: float = entity_memory()
+    y_offset: float = entity_memory()
+    stage: NoteStageParams = entity_memory()
+    projection: NoteStageProjection = entity_memory()
+    end_time: float = entity_memory()
+
+    def initialize(self):
+        self.end_time = self.start_time + SLOT_EFFECT_DURATION / Options.effect_animation_speed
+
+    def spawn_time(self) -> float:
+        return self.start_time
+
+    def despawn_time(self) -> float:
+        return self.start_time + SLOT_EFFECT_DURATION / Options.effect_animation_speed
+
+    def update_parallel(self):
+        if self.stage.has_transform():
+            self.projection.update(self.stage)
+            draw_slot_effect(
+                self.sprite,
+                self.start_time,
+                self.end_time,
+                self.lane,
+                y_offset=self.y_offset,
+                transform=self.projection.transform,
+            )
+        else:
+            draw_slot_effect(
+                self.sprite,
+                self.start_time,
+                self.end_time,
+                self.lane,
+                y_offset=self.y_offset,
+                transform=IDENTITY_STAGE_SCREEN_TRANSFORM,
+            )
+
+
+WATCH_SLOT_EFFECT_ARCHETYPES = (
+    WatchSlotGlowEffect,
+    WatchSlotEffect,
+)
