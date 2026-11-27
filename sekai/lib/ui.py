@@ -44,7 +44,7 @@ ui_config = UiConfig(
         scale=UiAnimationTween(
             start=0.6,
             end=1,
-            duration=0.15,
+            duration=0.20,
             ease=EaseType.LINEAR,
         ),
         alpha=UiAnimationTween(
@@ -114,7 +114,7 @@ def init_ui():
         background=False,
     )
     ui.combo_value.update(
-        anchor=Vec2(Layout.field_w * 0.355, Layout.field_h * 0.0875),
+        anchor=Vec2(Layout.field_w * 0.405, Layout.field_h * 0.0875),
         pivot=Vec2(0.5, 0.5),
         dimensions=Vec2(0, Layout.field_h * 0.14) * ui.combo_config.scale,
         alpha=ui.combo_config.alpha * show_ui,
@@ -122,7 +122,7 @@ def init_ui():
         background=False,
     )
     ui.combo_text.update(
-        anchor=Vec2(Layout.field_w * 0.355, Layout.field_h * 0.0875),
+        anchor=Vec2(Layout.field_w * 0.405, Layout.field_h * 0.0875),
         pivot=Vec2(0.5, -2.25),
         dimensions=Vec2(0, Layout.field_h * 0.14 * 0.25) * ui.combo_config.scale,
         alpha=ui.combo_config.alpha * show_ui,
@@ -138,9 +138,9 @@ def init_ui():
         background=False,
     )
     ui.progress.update(
-        anchor=box.bl,
-        pivot=Vec2(0, 0),
-        dimensions=Vec2(box.w, 0.15 * ui.progress_config.scale),
+        anchor=Vec2(0, box.t),
+        pivot=Vec2(0.5, 1),
+        dimensions=Vec2(box.w * 0.42, 0.035 * ui.progress_config.scale),
         alpha=ui.progress_config.alpha * show_ui * Options.ex_progress_enabled,
         horizontal_align=HorizontalAlign.CENTER,
         background=True,

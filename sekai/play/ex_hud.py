@@ -62,26 +62,27 @@ def draw_rank():
     if index == 8:
         index = 8 + int(time() * 6) % 12
     scale = 1 + 0.18 * max(0.0, 1 - (time() - M.ex_rank_changed) / 0.2)
-    x = -Layout.field_w * 0.355
+    x = -Layout.field_w * 0.405
     y = Layout.field_h * 0.11
     w = Layout.field_h * 0.30 * scale
     h = w * 0.5
     if Options.ex_rank_enabled:
-        BaseSkin.ex_rank[index].draw(Rect(l=x-w/2, r=x+w/2, b=y-h/2, t=y+h/2).as_quad(), z=get_z_alt(layers.overlay, 2000).tuple, a=1)
+        BaseSkin.ex_rank[index].draw(Rect(l=x-w/2, r=x+w/2, b=y-h/2, t=y+h/2).as_quad(), z=get_z_alt(layers.overlay, 9000).tuple, a=1)
 
     draw_details(x, y)
 
 
 def glyph(index: int, x: float, y: float, w: float, h: float):
-    BaseSkin.ex_labels[index].draw(Rect(l=x-w/2, r=x+w/2, b=y-h/2, t=y+h/2).as_quad(), z=get_z_alt(layers.overlay, 2001).tuple, a=1)
+    BaseSkin.ex_labels[index].draw(Rect(l=x-w/2, r=x+w/2, b=y-h/2, t=y+h/2).as_quad(), z=get_z_alt(layers.overlay, 9001).tuple, a=1)
 
 
 def digits(value: int, count: int, x: float, y: float, h: float):
-    w = h * 0.62
+    w = h * 0.48
     for i in range(count):
         digit = value % 10
         dx = x + (count / 2 - i - 0.5) * w
-        BaseSkin.ex_digits[digit].draw(Rect(l=dx-w/2, r=dx+w/2, b=y-h/2, t=y+h/2).as_quad(), z=get_z_alt(layers.overlay, 2002).tuple, a=1)
+        if i == 0 or value > 0 or count == 2:
+            BaseSkin.ex_digits[digit].draw(Rect(l=dx-w/2, r=dx+w/2, b=y-h/2, t=y+h/2).as_quad(), z=get_z_alt(layers.overlay, 9002).tuple, a=1)
         value = value // 10
 
 
@@ -93,7 +94,7 @@ def draw_details(x: float, y: float):
         if total > 0:
             accuracy = int((M.ex_perfect + 0.7*M.ex_great + 0.5*M.ex_good)*10000/total + 0.5)
         yy = y - h*0.105
-        digits(accuracy//100, 3, x-h*0.043, yy, h*0.035)
+        digits(accuracy//100, 3, x-h*0.036, yy, h*0.035)
         glyph(4, x, yy, h*0.012, h*0.035)
         digits(accuracy%100, 2, x+h*0.028, yy, h*0.035)
         glyph(5, x+h*0.065, yy, h*0.025, h*0.035)
@@ -108,7 +109,7 @@ def draw_details(x: float, y: float):
                 value = M.ex_good
             elif i == 3:
                 value = M.ex_miss
-            digits(value, 4, x+h*0.065, yy, h*0.032)
+            digits(value, 4, x+h*0.052, yy, h*0.032)
     if Options.ex_status_enabled and total > 0:
         if M.ex_perfect == total:
             glyph(8, -x, y-h*0.105, h*0.22, h*0.04)
