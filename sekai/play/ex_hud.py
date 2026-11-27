@@ -104,6 +104,12 @@ def update_visuals():
 def draw_rank():
     if Options.hide_ui:
         return
+    if Options.ex_finish_enabled and M.ex_note_total > 0:
+        total = M.ex_perfect + M.ex_great + M.ex_good + M.ex_miss
+        age = time() - M.ex_end_time
+        if total >= M.ex_note_total and age >= 0 and age < 2.8:
+            draw_finish()
+            return
     index = M.ex_rank
     if index == 8:
         index = 8 + int(time() * 6) % 12
@@ -144,7 +150,7 @@ def digits(value: int, count: int, x: float, y: float, h: float):
         value = value // 10
 
 
-def centered_score(value: int, x: float, y: float, h: float):
+def centered_score(value: int, x: float, y: float, h: float, depth: int = 9002, alpha: float = 1.0):
     count = 1
     for i in range(1, 7):
         if value >= 10 ** i:
@@ -154,7 +160,7 @@ def centered_score(value: int, x: float, y: float, h: float):
     for i in range(7):
         if i < count:
             dx = x + (count / 2 - i - 0.5) * w + (groups / 2 - i // 3) * w * 0.45
-            BaseSkin.ex_digits[value % 10].draw(Rect(l=dx-w/2,r=dx+w/2,b=y-h/2,t=y+h/2).as_quad(),z=get_z_alt(layers.overlay,9002).tuple,a=1)
+            BaseSkin.ex_digits[value % 10].draw(Rect(l=dx-w/2,r=dx+w/2,b=y-h/2,t=y+h/2).as_quad(),z=get_z_alt(layers.overlay,depth).tuple,a=alpha)
             value = value // 10
 
 
@@ -276,55 +282,60 @@ def draw_finish():
     if total < M.ex_note_total:
         return
     age = time() - M.ex_end_time
-    if age < 0 or age > 2.8:
+    if age < 0 or age >= 2.8:
         return
-    h = Layout.field_h
     bounds = screen()
-    fade = max(0.0, min(1.0, age / 0.12, (2.8-age)/0.55))
+    h = bounds.h
+    fade = max(0.0, min(1.0, age / 0.18, (2.8-age)/0.48))
     impact = max(0.0, 1-age/0.55)
     group = 2
     label = 9
-    celebration = M.ex_good + M.ex_miss == 0
+    celebration = M.ex_good + M.ex_miss == 0 and M.ex_life > 0
     if celebration:
         group = 1
         if M.ex_great == 0:
             group = 0
             label = 8
     z = get_z_alt(layers.overlay, 9003).tuple
-    depth = bounds.h * (0.10 + 0.12*impact)
-    a = fade * (0.45 + 0.5*impact)
-    if not celebration:
-        a *= 0.4
-    BaseSkin.ex_aura[group*4].draw(Rect(l=bounds.l,r=bounds.r,b=bounds.t-depth,t=bounds.t).as_quad(),z=z,a=a)
-    BaseSkin.ex_aura[group*4+1].draw(Rect(l=bounds.l,r=bounds.r,b=bounds.b,t=bounds.b+depth).as_quad(),z=z,a=a)
-    BaseSkin.ex_aura[group*4+2].draw(Rect(l=bounds.l,r=bounds.l+depth,b=bounds.b,t=bounds.t).as_quad(),z=z,a=a)
-    BaseSkin.ex_aura[group*4+3].draw(Rect(l=bounds.r-depth,r=bounds.r,b=bounds.b,t=bounds.t).as_quad(),z=z,a=a)
-    y = h*0.25
+    front = get_z_alt(layers.overlay, 9004).tuple
+    BaseSkin.lane_background_black.draw(Rect(l=bounds.l,r=bounds.r,b=bounds.b,t=bounds.t).as_quad(),z=z,a=0.82*fade)
+    depth = h*(0.14+0.12*impact)
+    a = fade*(0.72+0.28*impact)
+    BaseSkin.ex_aura[group*4].draw(Rect(l=bounds.l,r=bounds.r,b=bounds.t-depth,t=bounds.t).as_quad(),z=front,a=a)
+    BaseSkin.ex_aura[group*4+1].draw(Rect(l=bounds.l,r=bounds.r,b=bounds.b,t=bounds.b+depth).as_quad(),z=front,a=a)
+    BaseSkin.ex_aura[group*4+2].draw(Rect(l=bounds.l,r=bounds.l+depth,b=bounds.b,t=bounds.t).as_quad(),z=front,a=a)
+    BaseSkin.ex_aura[group*4+3].draw(Rect(l=bounds.r-depth,r=bounds.r,b=bounds.b,t=bounds.t).as_quad(),z=front,a=a)
+    y = (bounds.t+bounds.b)/2
     if celebration:
-        # Two expanding waves and symmetric sparks, using existing gradient sprites.
+        solid = 13
+        if group == 1:
+            solid = 15
+        for i in range(32):
+            p = min(1.0, age/(1.1+(i%5)*0.22))
+            side = 1 if i%2 == 0 else -1
+            px = side*bounds.w*(0.05+(0.13+(i%8)*0.038)*p)
+            py = y+h*((i%11)-5)*0.075*p
+            size = h*(0.004+(i%3)*0.003)*(1-p*0.55)
+            BaseSkin.ex_aura[solid].draw(Rect(l=px-size,r=px+size,b=py-size,t=py+size).as_quad(),z=front,a=fade*(1-p)*0.95)
         for i in range(2):
             wave = age-i*0.22
             if wave >= 0 and wave < 0.85:
-                spread = h*(0.12+wave*0.85)
-                opacity = (1-wave/0.85)*0.75
-                BaseSkin.ex_aura[group*4].draw(Rect(l=-spread,r=spread,b=y+h*0.10,t=y+h*0.13).as_quad(),z=z,a=opacity)
-                BaseSkin.ex_aura[group*4+1].draw(Rect(l=-spread,r=spread,b=y-h*0.13,t=y-h*0.10).as_quad(),z=z,a=opacity)
-        for i in range(24):
-            side = 1 if i%2 == 0 else -1
-            progress = min(1.0, age/(0.7+(i%5)*0.22))
-            px = side*h*(0.06+(0.20+(i%6)*0.085)*progress)
-            py = y+h*((i%7)-3)*0.045*progress
-            size = h*(0.009+(i%3)*0.004)*(1-progress*0.65)
-            BaseSkin.ex_aura[group*4].draw(Rect(l=px-size,r=px+size,b=py-size,t=py+size).as_quad(),z=z,a=fade*(1-progress)*0.9)
-        scale = 1+0.65*impact*impact
-        w = min(bounds.w*0.76,h*0.82*scale)
-        height = h*0.15*scale
-        BaseSkin.ex_labels[label].draw(Rect(l=-w/2,r=w/2,b=y-height/2,t=y+height/2).as_quad(),z=get_z_alt(layers.overlay,9004).tuple,a=fade)
-    else:
-        # Reuse the final rank sprite for ordinary clears and failed runs.
+                spread = bounds.w*(0.08+0.42*wave/0.85)
+                yy = h*(0.04+wave*0.25)
+                for j in range(2):
+                    side = 1 if j == 0 else -1
+                    BaseSkin.ex_aura[solid].draw(Rect(l=-spread,r=spread,b=y+side*yy-h*0.002,t=y+side*yy+h*0.002).as_quad(),z=front,a=(1-wave/0.85)*fade*0.8)
+        scale = 1+0.18*impact
+        w = min(bounds.w*0.82,h*1.35*scale)
+        height = w*0.18
+        BaseSkin.ex_labels[label].draw(Rect(l=-w/2,r=w/2,b=y-height/2,t=y+height/2).as_quad(),z=get_z_alt(layers.overlay,9005).tuple,a=fade)
+    reveal = max(0.0,min(1.0,(age-0.45)/0.3))*fade
+    if reveal > 0:
         index = M.ex_rank
-        w = h*0.42
-        BaseSkin.ex_rank[index].draw(Rect(l=-w/2,r=w/2,b=y-w/4,t=y+w/4).as_quad(),z=z,a=fade)
-    if age > 0.28:
+        if index == 8:
+            index = 8+int(time()*6)%12
+        rw = h*0.30
+        ry = y+h*0.23
+        BaseSkin.ex_rank[index].draw(Rect(l=-rw/2,r=rw/2,b=ry-rw/4,t=ry+rw/4).as_quad(),z=get_z_alt(layers.overlay,9005).tuple,a=reveal)
         score = int(1000000*(M.ex_perfect+0.7*M.ex_great+0.5*M.ex_good)/max(1,M.ex_note_total)+0.5)
-        centered_score(score, 0, y-h*0.19, h*0.065)
+        centered_score(score,0,y-h*0.21,h*0.075,9005,reveal)
