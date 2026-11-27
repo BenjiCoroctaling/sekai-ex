@@ -99,6 +99,8 @@ _STYLE_SPRITE_INDEX = {name: index for index, name in enumerate(_STYLE_SPRITE_NA
 class BaseSkin:
     render_mode: RenderMode = RenderMode.LIGHTWEIGHT
 
+    ex_digits: SpriteGroup = sprite_group(f"SEKAI EX Digit {i}" for i in range(10))
+    ex_labels: SpriteGroup = sprite_group(f"SEKAI EX Label {i}" for i in range(12))
     ex_rank: SpriteGroup = sprite_group(f"SEKAI EX Rank {i}" for i in range(20))
 
     cover: StandardSprite.STAGE_COVER

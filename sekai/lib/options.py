@@ -40,6 +40,13 @@ class Options:
 
     ex_rank_enabled: bool = toggle_option(name="SEKAI EX Rank", category=graphics, default=True)
 
+    ex_accuracy_enabled: bool = toggle_option(name="SEKAI EX Accuracy", category=graphics, default=True)
+    ex_counts_enabled: bool = toggle_option(name="SEKAI EX Judgment Counts", category=graphics, default=True)
+    ex_timing_enabled: bool = toggle_option(name="SEKAI EX Timing", category=graphics, default=True)
+    ex_status_enabled: bool = toggle_option(name="SEKAI EX AP FC", category=graphics, default=True)
+    ex_progress_enabled: bool = toggle_option(name="SEKAI EX Progress", category=graphics, default=True)
+    ex_metrics_enabled: bool = toggle_option(name="SEKAI EX Life and Score", category=graphics, default=True)
+
     speed: float = slider_option(
         name=StandardText.SPEED,
         category=gameplay,

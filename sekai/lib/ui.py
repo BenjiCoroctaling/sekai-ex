@@ -82,7 +82,7 @@ def init_ui():
         anchor=box.tl,
         pivot=Vec2(0, 1),
         dimensions=Vec2(0.75, 0.15) * ui.primary_metric_config.scale,
-        alpha=ui.primary_metric_config.alpha * show_ui,
+        alpha=ui.primary_metric_config.alpha * show_ui * Options.ex_metrics_enabled,
         horizontal_align=HorizontalAlign.LEFT,
         background=True,
     )
@@ -90,7 +90,7 @@ def init_ui():
         anchor=box.tl + Vec2(0.715, -0.035) * ui.primary_metric_config.scale,
         pivot=Vec2(1, 1),
         dimensions=Vec2(0, 0.08) * ui.primary_metric_config.scale,
-        alpha=ui.primary_metric_config.alpha * show_ui,
+        alpha=ui.primary_metric_config.alpha * show_ui * Options.ex_metrics_enabled,
         horizontal_align=HorizontalAlign.RIGHT,
         background=False,
     )
@@ -98,7 +98,7 @@ def init_ui():
         anchor=box.tr - Vec2(gap, 0) - Vec2(0.15, 0) * ui.menu_config.scale,
         pivot=Vec2(1, 1),
         dimensions=Vec2(0.55, 0.15) * ui.secondary_metric_config.scale,
-        alpha=ui.secondary_metric_config.alpha * show_ui,
+        alpha=ui.secondary_metric_config.alpha * show_ui * Options.ex_metrics_enabled,
         horizontal_align=HorizontalAlign.LEFT,
         background=True,
     )
@@ -109,7 +109,7 @@ def init_ui():
         - Vec2(0.035, 0.035) * ui.secondary_metric_config.scale,
         pivot=Vec2(1, 1),
         dimensions=Vec2(0, 0.08) * ui.secondary_metric_config.scale,
-        alpha=ui.secondary_metric_config.alpha * show_ui,
+        alpha=ui.secondary_metric_config.alpha * show_ui * Options.ex_metrics_enabled,
         horizontal_align=HorizontalAlign.RIGHT,
         background=False,
     )
@@ -141,7 +141,7 @@ def init_ui():
         anchor=box.bl,
         pivot=Vec2(0, 0),
         dimensions=Vec2(box.w, 0.15 * ui.progress_config.scale),
-        alpha=ui.progress_config.alpha * show_ui,
+        alpha=ui.progress_config.alpha * show_ui * Options.ex_progress_enabled,
         horizontal_align=HorizontalAlign.CENTER,
         background=True,
     )
@@ -149,7 +149,7 @@ def init_ui():
         anchor=box.bl + Vec2(0, gap + 0.15 * ui.progress_config.scale),
         pivot=Vec2(0, 0),
         dimensions=Vec2(box.w, 0.3 * ui.progress_config.scale),
-        alpha=ui.progress_config.alpha * show_ui,
+        alpha=ui.progress_config.alpha * show_ui * Options.ex_progress_enabled,
         horizontal_align=HorizontalAlign.CENTER,
         background=True,
     )
