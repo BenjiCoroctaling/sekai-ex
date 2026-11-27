@@ -62,6 +62,7 @@ def rank_for_counts(perfect: int, great: int, good: int, miss: int) -> int:
 
 
 def update_rank():
+    update_visuals()
     rank = rank_for_counts(M.ex_perfect, M.ex_great, M.ex_good, M.ex_miss)
     if M.ex_life <= 0:
         rank = 0
@@ -76,18 +77,47 @@ def update_rank():
         M.ex_rank_changed = time()
 
 
+def update_visuals():
+    now = time()
+    dt = now - M.ex_visual_time
+    target = min(1.0, M.ex_combo / 1000.0)
+    ap = 0.0
+    fc = 0.0
+    if M.ex_great + M.ex_good + M.ex_miss == 0:
+        ap = 1.0
+    elif M.ex_good + M.ex_miss == 0:
+        fc = 1.0
+    if dt < 0 or dt > 0.5:
+        M.ex_aura_level = target
+        M.ex_aura_ap = ap
+        M.ex_aura_fc = fc
+        M.ex_display_life = M.ex_life
+    else:
+        k = min(1.0, dt * 5)
+        M.ex_aura_level += (target - M.ex_aura_level) * k
+        M.ex_aura_ap += (ap - M.ex_aura_ap) * k
+        M.ex_aura_fc += (fc - M.ex_aura_fc) * k
+        M.ex_display_life += (M.ex_life - M.ex_display_life) * min(1.0, dt * 9)
+    M.ex_visual_time = now
+
+
 def draw_rank():
     if Options.hide_ui:
         return
     index = M.ex_rank
     if index == 8:
         index = 8 + int(time() * 6) % 12
-    scale = 1 + 0.18 * max(0.0, 1 - (time() - M.ex_rank_changed) / 0.2)
+    age = max(0.0, time() - M.ex_rank_changed)
+    impact = max(0.0, 1 - age / 0.42)
+    scale = 1 + (0.10 + M.ex_rank * 0.025) * impact * impact
     x = max(safe_area().l + Layout.field_h * 0.17, -Layout.field_w * 0.455)
     y = Layout.field_h * 0.11
     w = Layout.field_h * 0.30 * scale
     h = w * 0.5
     if Options.ex_rank_enabled:
+        if impact > 0 and M.ex_rank != 8:
+            spread = 1.0 + 0.65 * (1-impact)
+            BaseSkin.ex_rank[index].draw(Rect(l=x-w*spread/2,r=x+w*spread/2,b=y-h*spread/2,t=y+h*spread/2).as_quad(),z=get_z_alt(layers.overlay,8999).tuple,a=0.32*impact)
         if M.ex_rank == 6 or M.ex_rank == 7:
             pulse = abs((time() % 1.6) / 0.8 - 1)
             glow = 1.10 + 0.07 * pulse
@@ -158,7 +188,7 @@ def draw_extra(x: float, y: float):
     h = Layout.field_h
     z = get_z_alt(layers.overlay, 8998).tuple
     if Options.ex_metrics_enabled:
-        fraction = max(0.0, min(1.0, M.ex_life / max(1, M.ex_max_life)))
+        fraction = max(0.0, min(1.0, M.ex_display_life / max(1, M.ex_max_life)))
         left = x-h*0.14
         right = x+h*0.14
         yy = y-h*0.19
@@ -176,6 +206,12 @@ def draw_extra(x: float, y: float):
         score = int(1000000*(M.ex_perfect+0.7*M.ex_great+0.5*M.ex_good)/max(1,M.ex_note_total)+0.5)
         glyph(13, x, yy-h*0.087, h*0.10, h*0.027)
         digits(score, 7, x, yy-h*0.13, h*0.045)
+    if Options.ex_metrics_enabled and M.ex_life <= M.ex_max_life * 0.2:
+        bounds = screen()
+        depth = bounds.h * 0.035
+        pulse = 0.16 + 0.22 * abs((time() % 0.9) / 0.45 - 1)
+        BaseSkin.ex_aura[14].draw(Rect(l=bounds.l,r=bounds.l+depth,b=bounds.b,t=bounds.t).as_quad(),z=z,a=pulse)
+        BaseSkin.ex_aura[14].draw(Rect(l=bounds.r-depth,r=bounds.r,b=bounds.b,t=bounds.t).as_quad(),z=z,a=pulse)
     if Options.ex_progress_enabled and not is_watch() and M.ex_end_time > 0:
         fraction = max(0.0,min(1.0,time()/M.ex_end_time))
         yy = safe_area().t-h*0.04
@@ -187,26 +223,30 @@ def draw_extra(x: float, y: float):
 
 
 def draw_aura():
-    if not Options.ex_aura_enabled or M.ex_combo <= 0:
+    if not Options.ex_aura_enabled or M.ex_aura_level < 0.001:
         return
     bounds = screen()
-    total = M.ex_perfect + M.ex_great + M.ex_good + M.ex_miss
-    index = 8
-    if M.ex_perfect == total:
-        index = 0
-    elif M.ex_miss == 0 and M.ex_good == 0:
-        index = 4
-    growth = min(1.0, M.ex_combo / 1000.0)
+    growth = M.ex_aura_level
     elapsed = time() - M.ex_milestone_time
     pulse = 0.0
     if M.ex_milestone > 0 and elapsed >= 0 and elapsed < 0.8:
         pulse = (1 - elapsed / 0.8) * 0.18
         if M.ex_milestone % 500 == 0:
             pulse *= 1.5
-    alpha = min(1.0, (0.12 + 0.70 * growth + pulse) * Options.ex_aura_intensity)
-    depth = bounds.h * (0.012 + 0.065 * growth + pulse * 0.08)
+    breath = 0.88 + 0.12 * abs((time() % 2.4) / 1.2 - 1)
+    alpha = min(1.0, (0.82 * growth + pulse) * breath * Options.ex_aura_intensity)
+    depth = bounds.h * (0.025 + 0.085 * growth + pulse * 0.08)
     z = get_z_alt(layers.overlay, 8997).tuple
-    BaseSkin.ex_aura[index].draw(Rect(l=bounds.l,r=bounds.r,b=bounds.t-depth,t=bounds.t).as_quad(),z=z,a=alpha)
-    BaseSkin.ex_aura[index+1].draw(Rect(l=bounds.l,r=bounds.r,b=bounds.b,t=bounds.b+depth).as_quad(),z=z,a=alpha)
-    BaseSkin.ex_aura[index+2].draw(Rect(l=bounds.l,r=bounds.l+depth,b=bounds.b,t=bounds.t).as_quad(),z=z,a=alpha)
-    BaseSkin.ex_aura[index+3].draw(Rect(l=bounds.r-depth,r=bounds.r,b=bounds.b,t=bounds.t).as_quad(),z=z,a=alpha)
+    for group in range(3):
+        weight = max(0.0, 1-M.ex_aura_ap-M.ex_aura_fc)
+        if group == 0:
+            weight = M.ex_aura_ap
+        elif group == 1:
+            weight = M.ex_aura_fc
+        a = alpha * weight
+        if a > 0.001:
+            index = group * 4
+            BaseSkin.ex_aura[index].draw(Rect(l=bounds.l,r=bounds.r,b=bounds.t-depth,t=bounds.t).as_quad(),z=z,a=a)
+            BaseSkin.ex_aura[index+1].draw(Rect(l=bounds.l,r=bounds.r,b=bounds.b,t=bounds.b+depth).as_quad(),z=z,a=a)
+            BaseSkin.ex_aura[index+2].draw(Rect(l=bounds.l,r=bounds.l+depth,b=bounds.b,t=bounds.t).as_quad(),z=z,a=a)
+            BaseSkin.ex_aura[index+3].draw(Rect(l=bounds.r-depth,r=bounds.r,b=bounds.b,t=bounds.t).as_quad(),z=z,a=a)

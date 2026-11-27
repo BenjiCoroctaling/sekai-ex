@@ -19,6 +19,11 @@ class PlayLevelMemory:
     ex_last_hit: float
     ex_rank: int
     ex_rank_changed: float
+    ex_aura_level: float
+    ex_aura_ap: float
+    ex_aura_fc: float
+    ex_visual_time: float
+    ex_display_life: float
 
 
 def init_play_common(initial_life: int):
@@ -39,3 +44,9 @@ def init_play_common(initial_life: int):
     PlayLevelMemory.ex_last_hit = -100
     PlayLevelMemory.ex_rank = 8
     PlayLevelMemory.ex_rank_changed = -100
+
+    PlayLevelMemory.ex_aura_level = 0
+    PlayLevelMemory.ex_aura_ap = 1
+    PlayLevelMemory.ex_aura_fc = 0
+    PlayLevelMemory.ex_visual_time = -100
+    PlayLevelMemory.ex_display_life = initial_life
