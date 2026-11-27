@@ -110,9 +110,9 @@ def draw_rank():
     age = max(0.0, time() - M.ex_rank_changed)
     impact = max(0.0, 1 - age / 0.42)
     scale = 1 + (0.10 + M.ex_rank * 0.025) * impact * impact
-    x = max(safe_area().l + Layout.field_h * 0.17, -Layout.field_w * 0.455)
+    x = max(safe_area().l + Layout.field_h * 0.17, -Layout.field_w * 0.455) + Layout.field_h * Options.ex_hud_inset
     y = Layout.field_h * 0.11
-    w = Layout.field_h * 0.30 * scale
+    w = Layout.field_h * 0.30 * scale * Options.ex_hud_scale
     h = w * 0.5
     if Options.ex_rank_enabled:
         if impact > 0 and M.ex_rank != 8:
@@ -143,8 +143,22 @@ def digits(value: int, count: int, x: float, y: float, h: float):
         value = value // 10
 
 
+def centered_score(value: int, x: float, y: float, h: float):
+    count = 1
+    for i in range(1, 7):
+        if value >= 10 ** i:
+            count += 1
+    w = h * 0.48
+    groups = (count - 1) // 3
+    for i in range(7):
+        if i < count:
+            dx = x + (count / 2 - i - 0.5) * w + (groups / 2 - i // 3) * w * 0.45
+            BaseSkin.ex_digits[value % 10].draw(Rect(l=dx-w/2,r=dx+w/2,b=y-h/2,t=y+h/2).as_quad(),z=get_z_alt(layers.overlay,9002).tuple,a=1)
+            value = value // 10
+
+
 def draw_details(x: float, y: float):
-    h = Layout.field_h
+    h = Layout.field_h * Options.ex_hud_scale
     total = M.ex_perfect + M.ex_great + M.ex_good + M.ex_miss
     if Options.ex_accuracy_enabled:
         accuracy = 10000
@@ -185,7 +199,7 @@ def draw_details(x: float, y: float):
 
 
 def draw_extra(x: float, y: float):
-    h = Layout.field_h
+    h = Layout.field_h * Options.ex_hud_scale
     z = get_z_alt(layers.overlay, 8998).tuple
     if Options.ex_metrics_enabled:
         fraction = max(0.0, min(1.0, M.ex_display_life / max(1, M.ex_max_life)))
@@ -205,7 +219,7 @@ def draw_extra(x: float, y: float):
         digits(M.ex_life, 5, x+h*0.045, yy-h*0.045, h*0.038)
         score = int(1000000*(M.ex_perfect+0.7*M.ex_great+0.5*M.ex_good)/max(1,M.ex_note_total)+0.5)
         glyph(13, x, yy-h*0.087, h*0.10, h*0.027)
-        digits(score, 7, x, yy-h*0.13, h*0.045)
+        centered_score(score, x, yy-h*0.13, h*0.045)
     if Options.ex_metrics_enabled and M.ex_life <= M.ex_max_life * 0.2:
         bounds = screen()
         depth = bounds.h * 0.035
@@ -214,12 +228,12 @@ def draw_extra(x: float, y: float):
         BaseSkin.ex_aura[14].draw(Rect(l=bounds.r-depth,r=bounds.r,b=bounds.b,t=bounds.t).as_quad(),z=z,a=pulse)
     if Options.ex_progress_enabled and not is_watch() and M.ex_end_time > 0:
         fraction = max(0.0,min(1.0,time()/M.ex_end_time))
-        yy = safe_area().t-h*0.04
-        left = -h*0.35
-        right = h*0.35
-        BaseSkin.lane_background_black.draw(Rect(l=left,r=right,b=yy-h*0.006,t=yy+h*0.006).as_quad(),z=z,a=0.8)
+        yy = safe_area().t-h*0.055
+        left = -h*0.55
+        right = h*0.55
+        BaseSkin.lane_background_black.draw(Rect(l=left,r=right,b=yy-h*0.010,t=yy+h*0.010).as_quad(),z=z,a=0.8)
         if fraction > 0:
-            BaseSkin.ex_aura[15].draw(Rect(l=left,r=left+(right-left)*fraction,b=yy-h*0.006,t=yy+h*0.006).as_quad(),z=z,a=1)
+            BaseSkin.ex_aura[15].draw(Rect(l=left,r=left+(right-left)*fraction,b=yy-h*0.010,t=yy+h*0.010).as_quad(),z=z,a=1)
 
 
 def draw_aura():

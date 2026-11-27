@@ -47,6 +47,10 @@ class Options:
     ex_progress_enabled: bool = toggle_option(name="SEKAI EX Progress", category=graphics, default=True)
     ex_metrics_enabled: bool = toggle_option(name="SEKAI EX Life and Score", category=graphics, default=True)
 
+    ex_native_metrics: bool = toggle_option(name="SEKAI EX Native Metrics", category=graphics, default=False)
+    ex_hud_scale: float = slider_option(name="SEKAI EX HUD Size", category=graphics, default=1, min=0.7, max=1.15, step=0.05, unit=StandardText.PERCENTAGE_UNIT)
+    ex_hud_inset: float = slider_option(name="SEKAI EX HUD Inset", category=graphics, default=0, min=0, max=0.08, step=0.01, unit=StandardText.PERCENTAGE_UNIT)
+
     ex_aura_enabled: bool = toggle_option(name="SEKAI EX Combo Aura", category=graphics, default=True)
     ex_aura_intensity: float = slider_option(name="SEKAI EX Aura Intensity", category=graphics, default=1, min=0, max=1, step=0.05, unit=StandardText.PERCENTAGE_UNIT)
 

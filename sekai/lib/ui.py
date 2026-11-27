@@ -1,4 +1,4 @@
-from sonolus.script.runtime import HorizontalAlign, runtime_ui, safe_area
+from sonolus.script.runtime import HorizontalAlign, is_play, is_watch, runtime_ui, safe_area
 from sonolus.script.ui import (
     EaseType,
     UiAnimation,
@@ -69,6 +69,7 @@ def init_ui():
     box.r = min_x_extent
     box.l = -min_x_extent
     show_ui = not Options.hide_ui
+    show_native_metrics = not (is_play() or is_watch()) or Options.ex_native_metrics or not Options.ex_metrics_enabled
 
     ui.menu.update(
         anchor=box.tr,
@@ -82,7 +83,7 @@ def init_ui():
         anchor=box.tl,
         pivot=Vec2(0, 1),
         dimensions=Vec2(0.75, 0.15) * ui.primary_metric_config.scale,
-        alpha=ui.primary_metric_config.alpha * show_ui * Options.ex_metrics_enabled,
+        alpha=ui.primary_metric_config.alpha * show_ui * show_native_metrics,
         horizontal_align=HorizontalAlign.LEFT,
         background=False,
     )
@@ -90,7 +91,7 @@ def init_ui():
         anchor=box.tl + Vec2(0.715, -0.035) * ui.primary_metric_config.scale,
         pivot=Vec2(1, 1),
         dimensions=Vec2(0, 0.08) * ui.primary_metric_config.scale,
-        alpha=ui.primary_metric_config.alpha * show_ui * Options.ex_metrics_enabled,
+        alpha=ui.primary_metric_config.alpha * show_ui * show_native_metrics,
         horizontal_align=HorizontalAlign.RIGHT,
         background=False,
     )
@@ -98,7 +99,7 @@ def init_ui():
         anchor=box.tr - Vec2(gap, 0) - Vec2(0.15, 0) * ui.menu_config.scale,
         pivot=Vec2(1, 1),
         dimensions=Vec2(0.55, 0.15) * ui.secondary_metric_config.scale,
-        alpha=ui.secondary_metric_config.alpha * show_ui * Options.ex_metrics_enabled,
+        alpha=ui.secondary_metric_config.alpha * show_ui * show_native_metrics,
         horizontal_align=HorizontalAlign.LEFT,
         background=False,
     )
@@ -109,22 +110,22 @@ def init_ui():
         - Vec2(0.035, 0.035) * ui.secondary_metric_config.scale,
         pivot=Vec2(1, 1),
         dimensions=Vec2(0, 0.08) * ui.secondary_metric_config.scale,
-        alpha=ui.secondary_metric_config.alpha * show_ui * Options.ex_metrics_enabled,
+        alpha=ui.secondary_metric_config.alpha * show_ui * show_native_metrics,
         horizontal_align=HorizontalAlign.RIGHT,
         background=False,
     )
     ui.combo_value.update(
-        anchor=Vec2(min(safe_area().r - Layout.field_h * 0.17, Layout.field_w * 0.455), Layout.field_h * 0.0875),
+        anchor=Vec2(min(safe_area().r - Layout.field_h * 0.17, Layout.field_w * 0.455) - Layout.field_h * Options.ex_hud_inset, Layout.field_h * 0.0875),
         pivot=Vec2(0.5, 0.5),
-        dimensions=Vec2(0, Layout.field_h * 0.14) * ui.combo_config.scale,
+        dimensions=Vec2(0, Layout.field_h * 0.14) * ui.combo_config.scale * Options.ex_hud_scale,
         alpha=ui.combo_config.alpha * show_ui,
         horizontal_align=HorizontalAlign.CENTER,
         background=False,
     )
     ui.combo_text.update(
-        anchor=Vec2(min(safe_area().r - Layout.field_h * 0.17, Layout.field_w * 0.455), Layout.field_h * 0.0875),
+        anchor=Vec2(min(safe_area().r - Layout.field_h * 0.17, Layout.field_w * 0.455) - Layout.field_h * Options.ex_hud_inset, Layout.field_h * 0.0875),
         pivot=Vec2(0.5, -2.25),
-        dimensions=Vec2(0, Layout.field_h * 0.14 * 0.25) * ui.combo_config.scale,
+        dimensions=Vec2(0, Layout.field_h * 0.14 * 0.25) * ui.combo_config.scale * Options.ex_hud_scale,
         alpha=ui.combo_config.alpha * show_ui,
         horizontal_align=HorizontalAlign.CENTER,
         background=False,
