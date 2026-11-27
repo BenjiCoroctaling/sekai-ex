@@ -1,0 +1,1 @@
+Importer creator.html à la racine du dépôt. Ouvrir https://benjicoroctaling.github.io/sekai-ex/creator.html. Charger le serveur, modifier le catalogue, exporter le ZIP et importer son dossier sonolus à la racine. Ne pas supprimer les autres fichiers. Les modifications restent en mémoire jusqu’à export. Aucun accès GitHub automatique.
