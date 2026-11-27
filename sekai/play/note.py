@@ -325,6 +325,13 @@ class BaseNote(PlayArchetype):
                 self.judge(self.best_touch_time)
             else:
                 self.judge_wrong_way(self.best_touch_time)
+            if self.is_scored and self.despawn:
+                record_judgment(self.result.judgment, self.result.accuracy)
+            return
+        if self.is_scored and time() > self.input_interval.end:
+            self.handle_late_miss()
+            if self.despawn:
+                record_judgment(self.result.judgment, self.result.accuracy)
             return
         if self.is_scored and time() in self.input_interval and self.captured_touch_id == 0:
             if has_tap_input(self.kind):
@@ -397,14 +404,14 @@ class BaseNote(PlayArchetype):
             case _:
                 assert_never(kind)
 
+        if self.despawn:
+            record_judgment(self.result.judgment, self.result.accuracy)
+
     def update_parallel(self):
         if self.despawn:
             return
         if not self.is_scored and time() >= self.visual_end_time:
             self.despawn = True
-            return
-        if self.is_scored and time() > self.input_interval.end:
-            self.handle_late_miss()
             return
         self.draw_hitbox()
         if time() < self.visual_start_time:
@@ -514,7 +521,6 @@ class BaseNote(PlayArchetype):
             )
         if self.is_scored:
             self.result.haptic = get_note_haptic_feedback(self.kind, self.result.judgment)
-            record_judgment(self.result.judgment, self.result.accuracy)
         self.end_time = offset_adjusted_time()
         self.played_hit_effects = self.should_play_hit_effects
 
