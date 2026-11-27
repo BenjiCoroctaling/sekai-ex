@@ -1,0 +1,15 @@
+{
+  "title": "SEKAI EX",
+  "description": "Independent rhythm game server • Development preview",
+  "buttons": [
+    {
+      "type": "level"
+    },
+    {
+      "type": "engine"
+    }
+  ],
+  "configuration": {
+    "options": []
+  }
+}

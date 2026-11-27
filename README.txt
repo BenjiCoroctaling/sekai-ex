@@ -1,0 +1,2 @@
+SEKAI EX — 0.1
+Décompresser. Créer un dépôt public GitHub sekai-ex. Importer le CONTENU du dossier, y compris .nojekyll. Settings > Pages > Deploy from a branch > main / root > Save. Ajouter l’adresse Pages dans Sonolus. Le catalogue est vide volontairement. Les endpoints JSON sans extension suivent la spécification Sonolus; vérifier leur accessibilité sur Pages et dans le client. Le moteur, le HUD, les niveaux et les scores ne sont pas inclus.
