@@ -108,6 +108,7 @@ from sekai.lib.timescale_consumer import (
 )
 from sekai.play.note import derive_note_archetypes
 from sekai.watch.dynamic_stage import WatchDynamicStage
+from sekai.watch.ex_hud_data import WatchHudData
 
 
 class WatchBaseNote(WatchArchetype):
@@ -133,6 +134,7 @@ class WatchBaseNote(WatchArchetype):
     prev_ref: EntityRef[WatchBaseNote] = imported(name="prev")
     effect_kind: NoteEffectKind = imported(name="effectKind")
 
+    ex_hud_next: int = entity_data()
     kind: NoteKind = entity_data()
     data_init_done: bool = entity_data()
     # Another note may call init_data before this note finishes preprocessing.
@@ -263,6 +265,10 @@ class WatchBaseNote(WatchArchetype):
             if self.is_scored:
                 schedule_note_sfx(self.effect_kind, Judgment.PERFECT, self.target_time)
                 self.schedule_slot_effects_at(self.target_time)
+
+        if self.is_scored:
+            self.ex_hud_next = WatchHudData.head
+            WatchHudData.head = self.index
 
         self.result.target_time = self.target_time
 

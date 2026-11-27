@@ -5,6 +5,8 @@ from sekai.lib import archetype_names
 from sekai.lib.layout import IDENTITY_STAGE_SCREEN_TRANSFORM, refresh_layout
 from sekai.lib.stage import draw_stage_and_accessories, get_stage_props, play_lane_particle
 from sekai.watch.dynamic_stage import WatchDynamicStage
+from sekai.watch.ex_hud import update_watch_hud
+from sekai.play.ex_hud import draw_rank
 
 
 class WatchStaticStage(WatchArchetype):
@@ -19,9 +21,11 @@ class WatchStaticStage(WatchArchetype):
     @callback(order=-3)
     def update_sequential(self):
         refresh_layout()
+        update_watch_hud()
 
     def update_parallel(self):
         draw_stage_and_accessories()
+        draw_rank()
 
 
 class WatchScheduledLaneEffect(WatchArchetype):

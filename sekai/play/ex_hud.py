@@ -1,6 +1,6 @@
 from sonolus.script.bucket import Judgment
 from sonolus.script.quad import Rect
-from sonolus.script.runtime import time
+from sonolus.script.runtime import is_watch, is_replay, safe_area, time
 from sekai.lib.layout import Layout
 from sekai.lib.layer import get_z_alt, layers
 from sekai.lib.options import Options
@@ -62,7 +62,7 @@ def draw_rank():
     if index == 8:
         index = 8 + int(time() * 6) % 12
     scale = 1 + 0.18 * max(0.0, 1 - (time() - M.ex_rank_changed) / 0.2)
-    x = -Layout.field_w * 0.405
+    x = max(safe_area().l + Layout.field_h * 0.17, -Layout.field_w * 0.455)
     y = Layout.field_h * 0.11
     w = Layout.field_h * 0.30 * scale
     h = w * 0.5
@@ -109,13 +109,13 @@ def draw_details(x: float, y: float):
                 value = M.ex_good
             elif i == 3:
                 value = M.ex_miss
-            digits(value, 4, x+h*0.052, yy, h*0.032)
+            digits(value, 4, x+h*0.065, yy, h*0.040)
     if Options.ex_status_enabled and total > 0:
         if M.ex_perfect == total:
             glyph(8, -x, y-h*0.105, h*0.22, h*0.04)
         elif M.ex_miss == 0 and M.ex_good == 0:
             glyph(9, -x, y-h*0.105, h*0.22, h*0.04)
-    if Options.ex_timing_enabled and time()-M.ex_last_hit < 0.65:
+    if Options.ex_timing_enabled and (not is_watch() or is_replay()) and time()-M.ex_last_hit < 0.65:
         yy = -h*0.17
         if M.ex_error_ms < 0:
             glyph(6, -h*0.085, yy, h*0.09, h*0.035)

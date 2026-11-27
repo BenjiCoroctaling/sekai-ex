@@ -12,6 +12,8 @@ from sekai.lib.skin import init_skin
 from sekai.lib.stage import schedule_lane_sfx
 from sekai.lib.streams import Streams
 from sekai.lib.ui import init_ui
+from sekai.play.common import init_play_common
+from sekai.watch.ex_hud_data import WatchHudData
 from sekai.watch.dynamic_stage import WatchCameraChange, WatchDynamicStage
 from sekai.watch.note import WATCH_NOTE_ARCHETYPES
 from sekai.watch.static_stage import WatchScheduledLaneEffect, WatchStaticStage
@@ -32,6 +34,8 @@ class WatchInitialization(WatchArchetype):
         init_level_config(self.revision)
         init_event_list(self.first_camera_ref)
         init_layout()
+        init_play_common()
+        WatchHudData.head = 0
         init_ui()
         init_skin()
         init_particles()

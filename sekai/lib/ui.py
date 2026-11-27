@@ -84,7 +84,7 @@ def init_ui():
         dimensions=Vec2(0.75, 0.15) * ui.primary_metric_config.scale,
         alpha=ui.primary_metric_config.alpha * show_ui * Options.ex_metrics_enabled,
         horizontal_align=HorizontalAlign.LEFT,
-        background=True,
+        background=False,
     )
     ui.primary_metric_value.update(
         anchor=box.tl + Vec2(0.715, -0.035) * ui.primary_metric_config.scale,
@@ -100,7 +100,7 @@ def init_ui():
         dimensions=Vec2(0.55, 0.15) * ui.secondary_metric_config.scale,
         alpha=ui.secondary_metric_config.alpha * show_ui * Options.ex_metrics_enabled,
         horizontal_align=HorizontalAlign.LEFT,
-        background=True,
+        background=False,
     )
     ui.secondary_metric_value.update(
         anchor=box.tr
@@ -114,7 +114,7 @@ def init_ui():
         background=False,
     )
     ui.combo_value.update(
-        anchor=Vec2(Layout.field_w * 0.405, Layout.field_h * 0.0875),
+        anchor=Vec2(min(safe_area().r - Layout.field_h * 0.17, Layout.field_w * 0.455), Layout.field_h * 0.0875),
         pivot=Vec2(0.5, 0.5),
         dimensions=Vec2(0, Layout.field_h * 0.14) * ui.combo_config.scale,
         alpha=ui.combo_config.alpha * show_ui,
@@ -122,7 +122,7 @@ def init_ui():
         background=False,
     )
     ui.combo_text.update(
-        anchor=Vec2(Layout.field_w * 0.405, Layout.field_h * 0.0875),
+        anchor=Vec2(min(safe_area().r - Layout.field_h * 0.17, Layout.field_w * 0.455), Layout.field_h * 0.0875),
         pivot=Vec2(0.5, -2.25),
         dimensions=Vec2(0, Layout.field_h * 0.14 * 0.25) * ui.combo_config.scale,
         alpha=ui.combo_config.alpha * show_ui,
