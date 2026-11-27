@@ -1,0 +1,4 @@
+# SEKAI EX 0.5 — source preview (not deployable)
+Experimental Play-mode dynamic rank implementation. Requires Python 3.15 and sonolus-py 1.3, as in upstream. Run the existing Build Engine workflow in a separate repository; do not upload these sources to the live Pages server. The V0.4 custom skin is required at runtime (sprite names SEKAI EX Rank 0–19). The upstream build fetches external resources; no rights to those resources are granted here. Build and runtime have not been verified. No compiled engine included.
+
+Implemented in source: four native judgment counters, last timing error, unweighted accuracy rank with weights 1/.7/.5/0, rainbow SSS and rank-change pulse, rank visibility option. F/life, watch/replay, visible counters, score, timing, progress, AP/FC and additional toggles are not implemented. Existing native HUD remains unchanged. The rank starts SSS provisionally. Upstream MIT license retained.
